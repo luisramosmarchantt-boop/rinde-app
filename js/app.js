@@ -76,7 +76,7 @@ function renderShell(route) {
 }
 
 function renderNav(active, nav) {
-  return `<nav class="bottomnav">` + nav.map((n) => {
+  return `<nav class="bottomnav" style="grid-template-columns:repeat(${nav.length},1fr)">` + nav.map((n) => {
     if (n.fab) return `<a class="fab-slot"></a>`;
     return `<a href="#/${n.route}" data-nav="${n.route}" class="${active === n.id ? 'active' : ''}">
       <span class="ic">${n.ic}</span><span>${n.label}</span>
