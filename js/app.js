@@ -177,8 +177,25 @@ export async function boot() {
     stopRoute = onRoute((route) => { currentRoute = route; renderShell(route); });
     startRouter();
     registerServiceWorker();
+    maybeAutoSubscribePush();
   } else if (currentRoute) {
     renderShell(currentRoute);
+  }
+}
+
+// Pide el permiso de notificaciones apenas se entra, en vez de esperar a
+// que alguien lo encuentre en Ajustes. Si el navegador no soporta push, si
+// ya estaba activado, o si el usuario ya lo habia rechazado antes, no pide
+// nada (siempre lo puede activar a mano despues desde Ajustes).
+async function maybeAutoSubscribePush() {
+  try {
+    const push = await import('./push.js');
+    const state = await push.getSubscriptionState();
+    if (state === 'not-subscribed') {
+      await push.subscribeToPush(store.myUserId());
+    }
+  } catch (e) {
+    // Silencioso: si el prompt se bloquea o falla, queda la opcion manual.
   }
 }
 
