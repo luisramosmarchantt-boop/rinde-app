@@ -49,7 +49,7 @@ function renderShell(route) {
   const nav = navFor(store.myRole());
 
   const backBtn = screen.back
-    ? `<button class="iconbtn" data-back></button>`
+    ? `<button class="iconbtn" data-back>&larr;</button>`
     : '';
 
   appEl.innerHTML = `
