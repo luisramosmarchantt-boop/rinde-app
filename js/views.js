@@ -10,7 +10,8 @@ import {
 import { navigate } from './router.js';
 import {
   openExpenseForm, openReportForm, openAssignExpenses,
-  openProfileForm, openBTForm, openTransferForm, openReviewForm, sendManualReminder
+  openProfileForm, openBTForm, openTransferForm, openReviewForm, sendManualReminder,
+  openBroadcastForm
 } from './forms.js';
 import { LOGO_DATAURL } from './assets.js';
 import { newDoc, shareFiles, pdfFile } from './pdf.js';
@@ -59,12 +60,13 @@ export function renderDashboard() {
   const transfers = store.getTransfers().slice(0, 3);
   const activeReports = store.getReports().slice(0, 3);
   const balanceCls = t.availableBalance < 0 ? 'danger' : 'ok';
+  const canManageTransfers = store.isReviewerOrAdmin();
 
   const html = `
     <div class="balance-card ${balanceCls}">
       <div class="balance-top">
         <span>Saldo disponible</span>
-        <button class="mini-link" data-action="transfer">+ transferencia</button>
+        ${canManageTransfers ? `<button class="mini-link" data-action="transfer">+ transferencia</button>` : ''}
       </div>
       <div class="balance-amount mono">${formatMoney(t.availableBalance, cur())}</div>
       <div class="balance-grid">
@@ -100,14 +102,14 @@ export function renderDashboard() {
     ${transfers.length ? `
       <div class="row between" style="margin:18px 2px 10px">
         <div class="section-title" style="margin:0">Transferencias recibidas</div>
-        <button class="mini-link plain" data-action="transfer">Agregar</button>
+        ${canManageTransfers ? `<button class="mini-link plain" data-action="transfer">Agregar</button>` : ''}
       </div>
       <div class="list simple-list">
-        ${transfers.map((tr) => `<button class="item transfer-item" data-action="edit-transfer" data-id="${tr.id}">
+        ${transfers.map((tr) => `<${canManageTransfers ? 'button' : 'div'} class="item transfer-item" ${canManageTransfers ? `data-action="edit-transfer" data-id="${tr.id}"` : ''}>
           <span class="emoji">💵</span>
           <span class="body"><span class="t">${esc(tr.note || 'Transferencia')}</span><span class="s">${formatDate(tr.date)}</span></span>
           <span class="amt mono">${formatMoney(tr.amount, tr.currency)}</span>
-        </button>`).join('')}
+        </${canManageTransfers ? 'button' : 'div'}>`).join('')}
       </div>
     ` : ''}
   `;
@@ -757,7 +759,10 @@ export function renderReviewerPanel() {
     </div>`;
 
   const html = `
-    <div class="section-title">Trabajadores (${workers.length})</div>
+    <div class="row between" style="margin-bottom:4px">
+      <div class="section-title" style="margin:0">Trabajadores (${workers.length})</div>
+      <button class="mini-link" data-action="broadcast">📢 Aviso general</button>
+    </div>
     ${workers.length ? workerRows : emptyInline('', 'Sin trabajadores aun', 'Apareceran aqui cuando se registren')}
 
     <div class="row between" style="margin:18px 2px 8px">
@@ -767,6 +772,7 @@ export function renderReviewerPanel() {
     <div id="panelExpList"></div>
   `;
   return { html, mount: (root) => {
+    root.querySelector('[data-action="broadcast"]')?.addEventListener('click', () => openBroadcastForm());
     root.querySelectorAll('[data-remind]').forEach((b) => b.onclick = () => sendManualReminder(b.dataset.remind, 'manual_reminder'));
     root.querySelectorAll('[data-fund]').forEach((b) => b.onclick = () => openTransferForm(null, b.dataset.fund));
     root.querySelectorAll('[data-pf]').forEach((b) => b.onclick = () => { panelFilter = b.dataset.pf; navigate('panel'); });

@@ -502,3 +502,32 @@ export async function sendManualReminder(ownerId, kind = 'manual_reminder') {
     toast('No se pudo enviar: ' + (e.message || e), 'err');
   }
 }
+
+// ---------- Aviso general a todos los trabajadores (revisora/admin) ----------
+export function openBroadcastForm() {
+  const html = `
+    <div class="sheet-head"><h2>Notificacion general</h2><button class="x" data-close>x</button></div>
+    <p class="muted tiny" style="margin-top:-6px">Se envia a todos los trabajadores con notificaciones activadas.</p>
+    <div class="field"><label>Titulo</label><input class="input" id="btitle" placeholder="Ej: Cierre de mes" /></div>
+    <div class="field"><label>Mensaje</label><textarea class="textarea" id="bbody" placeholder="Detalle del aviso"></textarea></div>
+    <button class="btn primary" data-save>Enviar a todos</button>
+  `;
+  openSheet(html, { onMount: (root, close) => {
+    root.querySelector('[data-close]').onclick = () => close();
+    root.querySelector('[data-save]').onclick = async () => {
+      const title = root.querySelector('#btitle').value.trim();
+      const body = root.querySelector('#bbody').value.trim();
+      if (!title) { toast('Ingresa un titulo', 'err'); return; }
+      const btn = root.querySelector('[data-save]'); btn.disabled = true;
+      try {
+        const { sendPush } = await import('./push.js');
+        const res = await sendPush({ recipientId: 'all', title, body, type: 'broadcast' });
+        toast(`Enviado a ${res.notified || 0} de ${res.workers || 0} trabajador(es)`, 'ok');
+        close();
+      } catch (e) {
+        btn.disabled = false;
+        toast('No se pudo enviar: ' + (e.message || e), 'err');
+      }
+    };
+  }});
+}
