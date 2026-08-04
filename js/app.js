@@ -206,12 +206,16 @@ boot();
 // registro del service worker (PWA) con actualizacion forzada
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  window.addEventListener('load', () => {
+  const doRegister = () => {
     navigator.serviceWorker.register('./sw.js').then((reg) => {
       reg.update().catch(() => {});
       setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
     }).catch((e) => console.warn('SW no registrado', e));
-  });
+  };
+  // boot() puede terminar despues de que 'load' ya disparo (espera a
+  // hydratar datos de Supabase), asi que si ya paso no hay que esperarlo.
+  if (document.readyState === 'complete') doRegister();
+  else window.addEventListener('load', doRegister);
   let hadController = !!navigator.serviceWorker.controller;
   let reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
