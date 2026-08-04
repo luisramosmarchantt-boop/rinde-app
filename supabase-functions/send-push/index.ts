@@ -1,0 +1,79 @@
+// Edge Function: send-push
+// Envia una notificacion Web Push a un trabajador. Solo revisor/admin pueden
+// invocarla (se valida el rol del que llama con su propio JWT). Usa
+// service_role internamente para leer las suscripciones sin pasar por RLS,
+// y deja registro en notifications_log.
+
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+import webpush from 'npm:web-push@3.6.7';
+
+const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY')!;
+const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY')!;
+const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || 'mailto:admin@example.com';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+
+function json(status: number, body: unknown) {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
+Deno.serve(async (req) => {
+  if (req.method !== 'POST') return json(405, { error: 'Metodo no permitido' });
+
+  const authHeader = req.headers.get('Authorization') || '';
+  if (!authHeader) return json(401, { error: 'Falta autenticacion' });
+
+  let payload: { recipient_id?: string; title?: string; body?: string; type?: string };
+  try { payload = await req.json(); } catch { return json(400, { error: 'JSON invalido' }); }
+  const { recipient_id, title, body, type } = payload;
+  if (!recipient_id || !title) return json(400, { error: 'Falta recipient_id o title' });
+
+  // Cliente con el JWT de quien llama, para validar su rol via RLS/helper.
+  const callerClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    global: { headers: { Authorization: authHeader } }
+  });
+  const { data: userData, error: userErr } = await callerClient.auth.getUser();
+  if (userErr || !userData?.user) return json(401, { error: 'Sesion invalida' });
+
+  const { data: callerProfile, error: profileErr } = await callerClient
+    .from('profiles').select('role').eq('id', userData.user.id).single();
+  if (profileErr || !callerProfile || !['reviewer', 'admin'].includes(callerProfile.role)) {
+    return json(403, { error: 'Solo revisoras o admin pueden enviar notificaciones' });
+  }
+
+  // Cliente con service_role para leer suscripciones y escribir el log sin RLS.
+  const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  const { data: subs, error: subsErr } = await adminClient
+    .from('push_subscriptions').select('*').eq('user_id', recipient_id);
+  if (subsErr) return json(500, { error: 'No se pudo leer suscripciones', detail: subsErr.message });
+
+  let sent = 0;
+  const errors: string[] = [];
+  for (const sub of subs || []) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        JSON.stringify({ title, body: body || '', url: './' })
+      );
+      sent++;
+    } catch (e) {
+      errors.push(String((e as Error).message || e));
+      // Suscripcion vencida/invalida: la limpiamos.
+      if ((e as { statusCode?: number }).statusCode === 410 || (e as { statusCode?: number }).statusCode === 404) {
+        await adminClient.from('push_subscriptions').delete().eq('id', sub.id);
+      }
+    }
+  }
+
+  await adminClient.from('notifications_log').insert({
+    recipient_id,
+    type: type || 'manual_reminder',
+    title,
+    body: body || '',
+    sent_by: userData.user.id
+  });
+
+  return json(200, { sent, subscriptions: (subs || []).length, errors });
+});
