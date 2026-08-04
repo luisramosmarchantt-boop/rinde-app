@@ -2,7 +2,7 @@
 // Cache de la "app shell" (los datos en si viven en Supabase, no aca).
 // Ademas maneja notificaciones Web Push.
 
-const CACHE = 'rindeapp-cloud-v1';
+const CACHE = 'rindeapp-cloud-v2';
 const RUNTIME = 'rindeapp-cloud-runtime-v1';
 const ASSETS = [
   './',
@@ -49,29 +49,28 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
-  // Network-first para navegación (para tomar versiones nuevas),
-  // cache-first para el resto de assets.
-  if (request.mode === 'navigate') {
+  // Propio origen (HTML/CSS/JS de la app): network-first, para que un
+  // deploy nuevo se vea de inmediato en el siguiente reload, sin depender
+  // de que el usuario fuerce una limpieza de cache. Cae al cache solo si
+  // no hay conexión (soporte offline).
+  if (new URL(request.url).origin === self.location.origin) {
     event.respondWith(
-      caches.match('./index.html').then((cached) => {
-        const fresh = fetch(request).then((resp) => {
-          const copy = resp.clone();
-          caches.open(CACHE).then((cache) => cache.put('./index.html', copy)).catch(() => {});
-          return resp;
-        }).catch(() => null);
-        return cached || fresh;
-      })
+      fetch(request).then((resp) => {
+        const copy = resp.clone();
+        caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+        return resp;
+      }).catch(() => caches.match(request).then((cached) => cached || caches.match('./index.html')))
     );
     return;
   }
 
+  // CDN externo (jsPDF, Tesseract): cache-first, esas URLs son inmutables.
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((resp) => {
         const copy = resp.clone();
-        const targetCache = new URL(request.url).origin === self.location.origin ? CACHE : RUNTIME;
-        caches.open(targetCache).then((cache) => cache.put(request, copy)).catch(() => {});
+        caches.open(RUNTIME).then((cache) => cache.put(request, copy)).catch(() => {});
         return resp;
       }).catch(() => cached);
     })
