@@ -326,11 +326,12 @@ export function openAssignExpenses(reportId) {
   }});
 }
 
-// ---------- Mi perfil (nombre) ----------
-export function openProfileForm() {
-  const p = store.getProfile();
+// ---------- Perfil (nombre): el propio, o el de un trabajador si es revisora/admin ----------
+export function openProfileForm(userId = null) {
+  const editingOther = userId && userId !== store.myUserId();
+  const p = editingOther ? store.getProfileById(userId) : store.getProfile();
   const html = `
-    <div class="sheet-head"><h2>Mi perfil</h2><button class="x" data-close>x</button></div>
+    <div class="sheet-head"><h2>${editingOther ? 'Editar trabajador' : 'Mi perfil'}</h2><button class="x" data-close>x</button></div>
     <div class="field"><label>Nombre</label><input class="input" id="name" value="${esc(p?.fullName || '')}"/></div>
     <div class="field"><label>RUT</label><input class="input" value="${esc(p?.rut || '')}" disabled/></div>
     <div class="field"><label>Rol</label><input class="input" value="${roleLabel(p?.role)}" disabled/></div>
@@ -340,8 +341,8 @@ export function openProfileForm() {
     root.querySelector('[data-close]').onclick = () => close();
     root.querySelector('[data-save]').onclick = async () => {
       const name = root.querySelector('#name').value.trim();
-      if (!name) { toast('Ingresa tu nombre', 'err'); return; }
-      try { await store.updateProfileName(store.myUserId(), name); toast('Perfil actualizado', 'ok'); close(); }
+      if (!name) { toast('Ingresa un nombre', 'err'); return; }
+      try { await store.updateProfileName(p.id, name); toast('Perfil actualizado', 'ok'); close(); }
       catch (e) { toast('No se pudo guardar: ' + (e.message || e), 'err'); }
     };
   }});
@@ -503,25 +504,42 @@ export async function sendManualReminder(ownerId, kind = 'manual_reminder') {
   }
 }
 
-// ---------- Aviso general a todos los trabajadores (revisora/admin) ----------
+// ---------- Aviso a trabajadores elegidos, o a todos (revisora/admin) ----------
 export function openBroadcastForm() {
+  const workers = store.getAllProfiles().filter((p) => p.role === 'worker');
+  const rows = workers.map((w) =>
+    `<label class="manage-row">
+      <input type="checkbox" data-wid="${w.id}" checked style="width:20px;height:20px"/>
+      <span class="nm">${esc(w.fullName || w.rut)}</span>
+    </label>`).join('');
   const html = `
-    <div class="sheet-head"><h2>Notificacion general</h2><button class="x" data-close>x</button></div>
-    <p class="muted tiny" style="margin-top:-6px">Se envia a todos los trabajadores con notificaciones activadas.</p>
+    <div class="sheet-head"><h2>Notificar trabajadores</h2><button class="x" data-close>x</button></div>
     <div class="field"><label>Titulo</label><input class="input" id="btitle" placeholder="Ej: Cierre de mes" /></div>
     <div class="field"><label>Mensaje</label><textarea class="textarea" id="bbody" placeholder="Detalle del aviso"></textarea></div>
-    <button class="btn primary" data-save>Enviar a todos</button>
+    <div class="row between" style="margin:10px 2px 4px">
+      <label>Destinatarios</label>
+      <button type="button" class="mini-link" data-toggle-all>Marcar/desmarcar todos</button>
+    </div>
+    <div style="max-height:40vh;overflow:auto">${rows || '<p class="muted center">Sin trabajadores</p>'}</div>
+    <button class="btn primary" data-save style="margin-top:14px">Enviar</button>
   `;
-  openSheet(html, { onMount: (root, close) => {
+  openSheet(html, { full: true, onMount: (root, close) => {
     root.querySelector('[data-close]').onclick = () => close();
+    root.querySelector('[data-toggle-all]').onclick = () => {
+      const boxes = Array.from(root.querySelectorAll('[data-wid]'));
+      const allChecked = boxes.every((b) => b.checked);
+      boxes.forEach((b) => { b.checked = !allChecked; });
+    };
     root.querySelector('[data-save]').onclick = async () => {
       const title = root.querySelector('#btitle').value.trim();
       const body = root.querySelector('#bbody').value.trim();
+      const recipientIds = Array.from(root.querySelectorAll('[data-wid]:checked')).map((c) => c.dataset.wid);
       if (!title) { toast('Ingresa un titulo', 'err'); return; }
+      if (!recipientIds.length) { toast('Elige al menos un trabajador', 'err'); return; }
       const btn = root.querySelector('[data-save]'); btn.disabled = true;
       try {
         const { sendPush } = await import('./push.js');
-        const res = await sendPush({ recipientId: 'all', title, body, type: 'broadcast' });
+        const res = await sendPush({ recipientIds, title, body, type: 'broadcast' });
         toast(`Enviado a ${res.notified || 0} de ${res.workers || 0} trabajador(es)`, 'ok');
         close();
       } catch (e) {

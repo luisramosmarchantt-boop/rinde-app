@@ -713,17 +713,17 @@ function roleLabelText(role) { return role === 'admin' ? 'Administrador' : role 
 // ============ BT / PROYECTOS ============
 export function renderBTs() {
   const bts = store.getBTs();
-  const isAdmin = store.isAdmin();
+  const canManage = store.isReviewerOrAdmin();
   const html = `
-    ${isAdmin ? `<button class="btn primary" data-act="new" style="margin-bottom:14px">+ Nueva BT / Proyecto</button>` : ''}
-    <p class="muted tiny" style="margin:-6px 2px 12px">${isAdmin ? 'Crea y administra las BT (proyectos) de la empresa.' : 'BT (proyectos) disponibles para asignar a tus gastos.'}</p>
+    ${canManage ? `<button class="btn primary" data-act="new" style="margin-bottom:14px">+ Nueva BT / Proyecto</button>` : ''}
+    <p class="muted tiny" style="margin:-6px 2px 12px">${canManage ? 'Crea y administra las BT (proyectos) de la empresa.' : 'BT (proyectos) disponibles para asignar a tus gastos.'}</p>
     ${bts.length ? bts.map((b) => {
       const count = store.getAllExpenses().filter((e) => e.btId === b.id).length;
       return `<div class="manage-row">
         <span class="nm">${esc(b.code)}${b.name ? ' - ' + esc(b.name) : ''}<br><span class="muted tiny">${count} gasto(s)</span></span>
-        ${isAdmin ? `<button data-edit="${b.id}">Editar</button><button class="del" data-del="${b.id}">Eliminar</button>` : ''}
+        ${canManage ? `<button data-edit="${b.id}">Editar</button><button class="del" data-del="${b.id}">Eliminar</button>` : ''}
       </div>`;
-    }).join('') : emptyInline('', 'Sin BT todavia', isAdmin ? 'Crea la primera BT / proyecto' : 'Aun no hay BT creadas')}
+    }).join('') : emptyInline('', 'Sin BT todavia', canManage ? 'Crea la primera BT / proyecto' : 'Aun no hay BT creadas')}
   `;
   return { html, mount: (root) => {
     root.querySelector('[data-act="new"]')?.addEventListener('click', () => openBTForm());
@@ -745,6 +745,7 @@ export function renderReviewerPanel() {
     const pending = store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length;
     return `<div class="manage-row">
       <span class="nm">${esc(w.fullName || w.rut)}<br><span class="muted tiny">Saldo ${formatMoney(t.availableBalance, cur())} ${pending ? '- ' + pending + ' sin revisar' : ''}</span></span>
+      <button data-edit-worker="${w.id}">Editar</button>
       <button data-remind="${w.id}">Recordar</button>
       <button data-fund="${w.id}">+ Fondo</button>
     </div>`;
@@ -773,6 +774,7 @@ export function renderReviewerPanel() {
   `;
   return { html, mount: (root) => {
     root.querySelector('[data-action="broadcast"]')?.addEventListener('click', () => openBroadcastForm());
+    root.querySelectorAll('[data-edit-worker]').forEach((b) => b.onclick = () => openProfileForm(b.dataset.editWorker));
     root.querySelectorAll('[data-remind]').forEach((b) => b.onclick = () => sendManualReminder(b.dataset.remind, 'manual_reminder'));
     root.querySelectorAll('[data-fund]').forEach((b) => b.onclick = () => openTransferForm(null, b.dataset.fund));
     root.querySelectorAll('[data-pf]').forEach((b) => b.onclick = () => { panelFilter = b.dataset.pf; navigate('panel'); });

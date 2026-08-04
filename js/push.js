@@ -65,9 +65,11 @@ export async function unsubscribeFromPush() {
 }
 
 // Invoca la Edge Function send-push (requiere ser revisor/admin).
-export async function sendPush({ recipientId, title, body, type }) {
+// recipientId: un id, o 'all' para todos los trabajadores.
+// recipientIds: lista de ids, para elegir a un grupo especifico.
+export async function sendPush({ recipientId, recipientIds, title, body, type }) {
   const { data, error } = await supabase.functions.invoke('send-push', {
-    body: { recipient_id: recipientId, title, body, type }
+    body: { recipient_id: recipientId, recipient_ids: recipientIds, title, body, type }
   });
   if (error) throw error;
   return data;
