@@ -76,6 +76,11 @@ export function renderDashboard() {
       </div>
     </div>
 
+    <button class="notice-card" data-action="inbox" style="align-items:center">
+      <span><b>🔔 Mis notificaciones</b></span>
+      ${store.getBadgeCount() ? `<span class="count-bubble">${store.getBadgeCount()}</span>` : `<small>Al dia</small>`}
+    </button>
+
     <div class="quick-actions">
       <button class="qa primary" data-action="expense"><b>+ Gasto</b><span>Foto, OCR y datos</span></button>
       <button class="qa" data-action="report"><b>+ Rendicion</b><span>Agrupar gastos</span></button>
@@ -123,6 +128,7 @@ export function renderDashboard() {
   return { html, mount: (root) => {
     hydrateThumbs(root);
     root.querySelector('[data-action="goexpenses"]')?.addEventListener('click', () => navigate('expenses'));
+    root.querySelector('[data-action="inbox"]')?.addEventListener('click', () => navigate('inbox'));
     root.querySelector('[data-action="install"]')?.addEventListener('click', async () => { await promptInstall(); navigate('dashboard'); });
     root.querySelectorAll('[data-action="transfer"]').forEach((b) => b.addEventListener('click', () => openTransferForm()));
     root.querySelector('[data-action="expense"]')?.addEventListener('click', () => openExpenseForm());
@@ -779,7 +785,7 @@ export function renderMyNotifications() {
 
   const notifRows = notifs.map((n) => `
     <div class="card tight" style="margin-bottom:8px">
-      <div class="row between"><b>${esc(n.title)}</b><span class="muted tiny">${formatDate(new Date(n.createdAt).toISOString().slice(0, 10))}</span></div>
+      <div class="row between"><b>${n.readAt ? '' : '🔵 '}${esc(n.title)}</b><span class="muted tiny">${formatDate(new Date(n.createdAt).toISOString().slice(0, 10))}</span></div>
       <div class="muted tiny">${NOTIF_TYPE_LABEL[n.type] || n.type}</div>
       ${n.body ? `<div class="tiny" style="margin-top:4px">${esc(n.body)}</div>` : ''}
     </div>`).join('');
@@ -797,6 +803,7 @@ export function renderMyNotifications() {
       const req = pending.find((r) => r.id === b.dataset.resolve);
       if (req) openResolveApprovalForm(req);
     });
+    store.markNotificationsRead().catch(() => {});
   }};
 }
 
@@ -818,7 +825,7 @@ export function renderSettings() {
     <div class="settings-list">
       <button class="si" data-act="inbox">
         <span class="ic">🔔</span><span class="lbl">Mis notificaciones</span>
-        ${store.getPendingApprovalsForMe().length ? `<span class="val" style="color:var(--danger)">${store.getPendingApprovalsForMe().length}</span>` : ''}
+        ${store.getBadgeCount() ? `<span class="count-bubble">${store.getBadgeCount()}</span>` : ''}
         <span class="chev"></span>
       </button>
     </div>

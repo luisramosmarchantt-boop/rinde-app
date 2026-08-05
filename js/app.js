@@ -30,7 +30,7 @@ const SCREENS = {
   admin:        { title: 'Administracion', render: renderAdminPanel, nav: 'panel', back: 'panel' },
   metrics:       { title: 'Metricas', sub: 'Todo el equipo', render: renderTeamMetrics, nav: 'metrics' },
   notifications: { title: 'Notificaciones', sub: 'Avisar a los trabajadores', render: renderNotificationsHub, nav: 'notifications' },
-  inbox:         { title: 'Mis notificaciones', render: renderMyNotifications, nav: 'settings', back: 'settings' }
+  inbox:         { title: 'Mis notificaciones', render: renderMyNotifications, nav: 'dashboard', back: 'dashboard' }
 };
 
 function navFor(role) {

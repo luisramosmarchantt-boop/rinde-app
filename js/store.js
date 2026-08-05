@@ -72,7 +72,8 @@ function mapApprovalRequest(row) {
 function mapNotification(row) {
   return {
     id: row.id, recipientId: row.recipient_id, type: row.type, title: row.title, body: row.body,
-    sentBy: row.sent_by, createdAt: new Date(row.created_at).getTime()
+    sentBy: row.sent_by, createdAt: new Date(row.created_at).getTime(),
+    readAt: row.read_at ? new Date(row.read_at).getTime() : null
   };
 }
 
@@ -330,6 +331,25 @@ export const getApprovalRequests = () => data.approvalRequests.slice();
 export const getPendingApprovalsForMe = () =>
   data.approvalRequests.filter((r) => r.requestedTo === currentUserId && r.status === 'pending');
 export const getMyNotifications = () => data.myNotifications.slice().sort((a, b) => b.createdAt - a.createdAt);
+
+// No leidas: se excluye el tipo approval_request para no contarlo dos veces
+// (esas ya se cuentan como "pendiente de resolver" via getPendingApprovalsForMe).
+export const getUnreadNotificationsCount = () =>
+  data.myNotifications.filter((n) => !n.readAt && n.type !== 'approval_request').length;
+export const getBadgeCount = () => getUnreadNotificationsCount() + getPendingApprovalsForMe().length;
+
+// Marca como leidas todas las notificaciones pendientes de lectura de esta
+// cuenta. Al ser un campo en el servidor (no local), queda leido en
+// cualquier otra sesion/dispositivo donde esa misma cuenta entre despues.
+export async function markNotificationsRead() {
+  const unreadIds = data.myNotifications.filter((n) => !n.readAt).map((n) => n.id);
+  if (!unreadIds.length) return;
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase.from('notifications_log').update({ read_at: nowIso }).in('id', unreadIds);
+  if (error) throw error;
+  data.myNotifications.forEach((n) => { if (unreadIds.includes(n.id)) n.readAt = Date.now(); });
+  notify();
+}
 
 export async function sendApprovalRequest(expenseId, toUserId, note = '') {
   const { data: row, error } = await supabase.from('approval_requests').insert({

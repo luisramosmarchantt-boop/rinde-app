@@ -147,6 +147,7 @@ a { color: var(--primary); }
 .qa.primary span { color: rgba(255,255,255,.82); }
 .notice-card { width: 100%; border: 1px solid var(--warning-soft); background: var(--warning-soft); color: var(--text); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; text-align: left; display: flex; justify-content: space-between; align-items: center; }
 .notice-card small { color: var(--warning); font-weight: 650; }
+.count-bubble { background: var(--danger); color: #fff; font-size: 12px; font-weight: 700; min-width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 999px; display: inline-block; padding: 0 6px; }
 .report-actions {
   display: grid;
   grid-template-columns: 1fr;
