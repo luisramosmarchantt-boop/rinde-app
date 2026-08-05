@@ -497,8 +497,12 @@ export async function sendManualReminder(ownerId, kind = 'manual_reminder') {
     : 'Llevas un tiempo sin registrar gastos. Sube tus boletas cuando puedas.';
   try {
     const { sendPush } = await import('./push.js');
-    await sendPush({ recipientId: ownerId, title, body, type: kind });
-    toast(`Recordatorio enviado a ${worker?.fullName || 'el trabajador'}`, 'ok');
+    const res = await sendPush({ recipientId: ownerId, title, body, type: kind });
+    if (res.sent > 0) {
+      toast(`Recordatorio enviado a ${worker?.fullName || 'el trabajador'}`, 'ok');
+    } else {
+      toast('No llego: ' + (res.errors?.[0] || 'sin suscripciones activas'), 'err');
+    }
   } catch (e) {
     toast('No se pudo enviar: ' + (e.message || e), 'err');
   }
@@ -540,8 +544,13 @@ export function openBroadcastForm() {
       try {
         const { sendPush } = await import('./push.js');
         const res = await sendPush({ recipientIds, title, body, type: 'broadcast' });
-        toast(`Enviado a ${res.notified || 0} de ${res.workers || 0} trabajador(es)`, 'ok');
-        close();
+        if (res.notified > 0) {
+          toast(`Enviado a ${res.notified} de ${res.workers || recipientIds.length} trabajador(es)`, 'ok');
+          close();
+        } else {
+          btn.disabled = false;
+          toast('No llego a nadie: ' + (res.errors?.[0] || 'sin suscripciones activas'), 'err');
+        }
       } catch (e) {
         btn.disabled = false;
         toast('No se pudo enviar: ' + (e.message || e), 'err');
