@@ -173,30 +173,43 @@ export async function boot() {
 
   if (!booted) {
     booted = true;
+    registerServiceWorker();
+    await maybeShowPushPrompt();
     unsubStore = store.subscribe(() => { if (currentRoute) renderShell(currentRoute); });
     stopRoute = onRoute((route) => { currentRoute = route; renderShell(route); });
     startRouter();
-    registerServiceWorker();
-    maybeAutoSubscribePush();
   } else if (currentRoute) {
     renderShell(currentRoute);
   }
 }
 
-// Pide el permiso de notificaciones apenas se entra, en vez de esperar a
-// que alguien lo encuentre en Ajustes. Si el navegador no soporta push, si
-// ya estaba activado, o si el usuario ya lo habia rechazado antes, no pide
-// nada (siempre lo puede activar a mano despues desde Ajustes).
-async function maybeAutoSubscribePush() {
+// Pantalla previa al shell, apenas se entra, pidiendo activar notificaciones
+// (en vez de esperar a que alguien lo encuentre en Ajustes). No bloquea el
+// acceso: "Ahora no" sigue de largo. Si ya estaba activado, rechazado, o el
+// navegador no soporta push, no se muestra nada.
+async function maybeShowPushPrompt() {
+  let push;
   try {
-    const push = await import('./push.js');
+    push = await import('./push.js');
     const state = await push.getSubscriptionState();
-    if (state === 'not-subscribed') {
-      await push.subscribeToPush(store.myUserId());
-    }
-  } catch (e) {
-    // Silencioso: si el prompt se bloquea o falla, queda la opcion manual.
-  }
+    if (state !== 'not-subscribed') return;
+  } catch (e) { return; }
+
+  await new Promise((resolve) => {
+    appEl.innerHTML = `
+      <div class="auth-screen" style="padding:32px 20px;max-width:420px;margin:0 auto;text-align:center">
+        <div style="font-size:48px;margin-bottom:12px">🔔</div>
+        <h1 style="margin-bottom:8px">Activa las notificaciones</h1>
+        <p class="muted" style="margin-bottom:24px">Te avisamos cuando tu revisora apruebe, objete o pida aclarar un gasto, y ante avisos generales del equipo.</p>
+        <button class="btn primary" data-allow style="width:100%;margin-bottom:10px">Activar notificaciones</button>
+        <button class="btn ghost" data-skip style="width:100%">Ahora no</button>
+      </div>`;
+    appEl.querySelector('[data-allow]').onclick = async () => {
+      try { await push.subscribeToPush(store.myUserId()); } catch (e) { /* se puede activar despues desde Ajustes */ }
+      resolve();
+    };
+    appEl.querySelector('[data-skip]').onclick = () => resolve();
+  });
 }
 
 export async function logout() {
