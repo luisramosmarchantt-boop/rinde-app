@@ -119,10 +119,12 @@ function renderLogin(initial = {}) {
         <button id="toggleMode" class="btn ghost" style="width:100%;margin-top:10px">
           ${mode === 'login' ? 'No tengo cuenta, crear una' : 'Ya tengo cuenta, ingresar'}
         </button>
+        ${canInstall() ? '<button id="installBtn" class="btn outline" style="width:100%;margin-top:10px">📲 Instalar App Rendiciones</button>' : ''}
         ${mode === 'login' ? '<p class="muted tiny" style="margin-top:16px">¿Olvidaste tu clave? Pidele a la administradora que te la resetee.</p>' : ''}
       </div>
     `;
     appEl.querySelector('#toggleMode').onclick = () => { mode = mode === 'login' ? 'register' : 'login'; error = ''; paint(); };
+    appEl.querySelector('#installBtn')?.addEventListener('click', async () => { await promptInstall(); paint(); });
     appEl.querySelector('#authForm').onsubmit = async (e) => {
       e.preventDefault();
       const rut = appEl.querySelector('#authRut').value;
@@ -176,7 +178,6 @@ export async function boot() {
   if (!booted) {
     booted = true;
     registerServiceWorker();
-    await maybeShowInstallPrompt();
     await maybeShowPushPrompt();
     unsubStore = store.subscribe(() => { if (currentRoute) renderShell(currentRoute); });
     stopRoute = onRoute((route) => { currentRoute = route; renderShell(route); });
@@ -184,31 +185,6 @@ export async function boot() {
   } else if (currentRoute) {
     renderShell(currentRoute);
   }
-}
-
-// Pantalla previa al shell ofreciendo instalar la PWA. Instalada, las
-// notificaciones funcionan de forma confiable (en pestaña de navegador
-// suelta, Android/Chrome puede simplemente no mostrarlas). No aparece si
-// ya esta instalada, si el navegador no ofrecio el evento (Safari/iOS no
-// lo soporta), o si ya se instalo/descarto antes en esta carga.
-async function maybeShowInstallPrompt() {
-  if (!canInstall()) return;
-
-  await new Promise((resolve) => {
-    appEl.innerHTML = `
-      <div class="auth-screen" style="padding:32px 20px;max-width:420px;margin:0 auto;text-align:center">
-        <div style="font-size:48px;margin-bottom:12px">📲</div>
-        <h1 style="margin-bottom:8px">Instala RindeApp Cloud</h1>
-        <p class="muted" style="margin-bottom:24px">Instalada en tu celular se abre como cualquier otra app y las notificaciones llegan de forma confiable.</p>
-        <button class="btn primary" data-install style="width:100%;margin-bottom:10px">Instalar app</button>
-        <button class="btn ghost" data-skip style="width:100%">Ahora no</button>
-      </div>`;
-    appEl.querySelector('[data-install]').onclick = async () => {
-      await promptInstall();
-      resolve();
-    };
-    appEl.querySelector('[data-skip]').onclick = () => resolve();
-  });
 }
 
 // Pantalla previa al shell, apenas se entra, pidiendo activar notificaciones
