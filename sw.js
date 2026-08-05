@@ -2,8 +2,12 @@
 // Cache de la "app shell" (los datos en si viven en Supabase, no aca).
 // Ademas maneja notificaciones Web Push.
 
-const CACHE = 'rindeapp-cloud-v4';
+const CACHE = 'rindeapp-cloud-v5';
 const RUNTIME = 'rindeapp-cloud-runtime-v1';
+// Unicos hosts externos que sirven archivos inmutables (versionados en la
+// URL). Cualquier otro origen externo (Supabase: datos, auth, storage) es
+// dinamico y jamas debe cachearse, o quedarian pegados datos viejos.
+const STATIC_CDN_HOSTS = ['cdn.jsdelivr.net'];
 const ASSETS = [
   './',
   './index.html',
@@ -66,17 +70,26 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // CDN externo (jsPDF, Tesseract): cache-first, esas URLs son inmutables.
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((resp) => {
-        const copy = resp.clone();
-        caches.open(RUNTIME).then((cache) => cache.put(request, copy)).catch(() => {});
-        return resp;
-      }).catch(() => cached);
-    })
-  );
+  // CDN de librerias estaticas (jsPDF, Tesseract): cache-first, esas URLs
+  // son inmutables (van versionadas). Todo lo demas externo (Supabase:
+  // datos, auth, storage) NO debe cachearse aca o quedarian pegados datos
+  // viejos para siempre sin importar cuantas veces se cierre/abra la app.
+  if (STATIC_CDN_HOSTS.includes(new URL(request.url).hostname)) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((resp) => {
+          const copy = resp.clone();
+          caches.open(RUNTIME).then((cache) => cache.put(request, copy)).catch(() => {});
+          return resp;
+        }).catch(() => cached);
+      })
+    );
+    return;
+  }
+
+  // Supabase u otro origen dinamico: directo a la red, sin pasar por el SW.
+  event.respondWith(fetch(request));
 });
 
 // ===== Web Push =====
