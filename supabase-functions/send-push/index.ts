@@ -118,5 +118,6 @@ Deno.serve(async (req) => {
     });
   }
 
+  console.log('send-push result', JSON.stringify({ targets, totalSent, notified, errors }));
   return json(200, { sent: totalSent, workers: totalWorkers ?? targets.length, notified, errors });
 });
