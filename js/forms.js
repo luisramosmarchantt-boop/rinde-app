@@ -329,12 +329,22 @@ export function openAssignExpenses(reportId) {
 // ---------- Perfil (nombre): el propio, o el de un trabajador si es revisora/admin ----------
 export function openProfileForm(userId = null) {
   const editingOther = userId && userId !== store.myUserId();
+  const canEditCargo = editingOther && store.isReviewerOrAdmin();
   const p = editingOther ? store.getProfileById(userId) : store.getProfile();
+  const cargoOpts = ['<option value="">Sin cargo</option>'].concat(
+    store.CARGOS.map((c) => `<option value="${esc(c)}" ${p?.cargo === c ? 'selected' : ''}>${esc(c)}</option>`)
+  ).join('');
   const html = `
     <div class="sheet-head"><h2>${editingOther ? 'Editar trabajador' : 'Mi perfil'}</h2><button class="x" data-close>x</button></div>
     <div class="field"><label>Nombre</label><input class="input" id="name" value="${esc(p?.fullName || '')}"/></div>
     <div class="field"><label>RUT</label><input class="input" value="${esc(p?.rut || '')}" disabled/></div>
     <div class="field"><label>Rol</label><input class="input" value="${roleLabel(p?.role)}" disabled/></div>
+    <div class="field">
+      <label>Cargo en la empresa</label>
+      ${canEditCargo
+        ? `<select class="select" id="cargo">${cargoOpts}</select>`
+        : `<input class="input" value="${esc(p?.cargo || 'Sin cargo')}" disabled/>`}
+    </div>
     <button class="btn primary" data-save>Guardar</button>
   `;
   openSheet(html, { onMount: (root, close) => {
@@ -342,7 +352,8 @@ export function openProfileForm(userId = null) {
     root.querySelector('[data-save]').onclick = async () => {
       const name = root.querySelector('#name').value.trim();
       if (!name) { toast('Ingresa un nombre', 'err'); return; }
-      try { await store.updateProfileName(p.id, name); toast('Perfil actualizado', 'ok'); close(); }
+      const cargo = canEditCargo ? root.querySelector('#cargo').value : undefined;
+      try { await store.updateProfileDetails(p.id, { fullName: name, cargo }); toast('Perfil actualizado', 'ok'); close(); }
       catch (e) { toast('No se pudo guardar: ' + (e.message || e), 'err'); }
     };
   }});

@@ -874,11 +874,12 @@ export function renderReviewerPanel() {
   const workerRows = workers.map((w) => {
     const t = store.totals(w.id);
     const pending = store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length;
+    const cargoPrefix = w.cargo ? esc(w.cargo) + ' - ' : '';
     return `<button class="item" data-open-worker="${w.id}">
       <span class="emoji">👤</span>
       <span class="body">
         <span class="t">${esc(w.fullName || w.rut)}</span>
-        <span class="s">${pending ? pending + ' sin revisar' : 'Al dia'}</span>
+        <span class="s">${cargoPrefix}${pending ? pending + ' sin revisar' : 'Al dia'}</span>
       </span>
       <span class="amt mono">${formatMoney(t.availableBalance, cur())}</span>
     </button>`;
@@ -918,7 +919,7 @@ export function renderReviewerWorkerDetail(workerId) {
 
   const html = `
     <div class="card">
-      <div class="muted tiny">${esc(w.rut)}</div>
+      <div class="muted tiny">${esc(w.rut)}${w.cargo ? ' - ' + esc(w.cargo) : ''}</div>
       <h2 style="margin:4px 0 10px;font-size:20px">${esc(w.fullName || w.rut)}</h2>
       <div class="balance-grid">
         <div><span>Recibido</span><b class="mono">${formatMoney(t.receivedTotal, cur())}</b></div>
@@ -1057,7 +1058,8 @@ export function renderAdminPanel() {
   const profiles = store.getAllProfiles();
   const rows = profiles.map((p) => `
     <div class="manage-row">
-      <span class="nm">${esc(p.fullName || p.rut)}<br><span class="muted tiny">${esc(p.rut)} - ${roleLabelText(p.role)}</span></span>
+      <span class="nm">${esc(p.fullName || p.rut)}<br><span class="muted tiny">${esc(p.rut)} - ${roleLabelText(p.role)}${p.cargo ? ' - ' + esc(p.cargo) : ''}</span></span>
+      ${p.id !== store.myUserId() ? `<button data-edit="${p.id}">Editar</button>` : ''}
       ${p.id !== store.myUserId() ? `
         <select data-role="${p.id}" class="select" style="width:auto">
           <option value="worker" ${p.role === 'worker' ? 'selected' : ''}>Trabajador</option>
@@ -1079,6 +1081,7 @@ export function renderAdminPanel() {
     root.querySelector('[data-act="bts"]').onclick = () => navigate('bts');
     root.querySelector('[data-act="metrics"]').onclick = () => navigate('metrics');
     root.querySelector('[data-act="notifications"]').onclick = () => navigate('notifications');
+    root.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openProfileForm(b.dataset.edit));
     root.querySelectorAll('[data-role]').forEach((sel) => sel.onchange = async () => {
       const ok = await confirmDialog({ title: 'Cambiar rol', message: `Se cambiara el rol de esta cuenta a "${roleLabelText(sel.value)}".`, confirmText: 'Cambiar' });
       if (!ok) { navigate('admin'); return; }

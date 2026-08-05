@@ -27,7 +27,7 @@ function notify() { subs.forEach((fn) => fn()); }
 
 // ===== Mapeo DB (snake_case) <-> JS (camelCase) =====
 function mapProfile(row) {
-  return { id: row.id, rut: row.rut, fullName: row.full_name, company: row.company, role: row.role, createdAt: new Date(row.created_at).getTime() };
+  return { id: row.id, rut: row.rut, fullName: row.full_name, company: row.company, role: row.role, cargo: row.cargo, createdAt: new Date(row.created_at).getTime() };
 }
 function mapBt(row) {
   return { id: row.id, code: row.code, name: row.name, createdBy: row.created_by, createdAt: new Date(row.created_at).getTime() };
@@ -365,13 +365,26 @@ export async function deleteBT(id) {
   if (error) throw error;
 }
 
-// ===== Perfil: nombre editable por el dueño o por revisora/admin =====
-export async function updateProfileName(userId, fullName) {
-  const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('id', userId);
+// ===== Perfil: nombre y cargo editables por el dueño (solo nombre) o por revisora/admin (ambos) =====
+export const CARGOS = [
+  'Gerente General', 'Representante Legal', 'Socio', 'Jefe de Administracion',
+  'Asistente Contable', 'Capataz', 'Ingeniero de Proyectos',
+  'Encargado de Prevencion de Riesgos', 'Encargado de Licitaciones',
+  'Maestro OOCC', 'Maestro Electrico'
+];
+
+export async function updateProfileDetails(userId, { fullName, cargo }) {
+  const dbPatch = {};
+  if (fullName !== undefined) dbPatch.full_name = fullName;
+  if (cargo !== undefined) dbPatch.cargo = cargo || null;
+  const { error } = await supabase.from('profiles').update(dbPatch).eq('id', userId);
   if (error) throw error;
   const p = getProfileById(userId);
-  if (p) p.fullName = fullName;
-  if (data.profile && data.profile.id === userId) data.profile.fullName = fullName;
+  if (p) { if (fullName !== undefined) p.fullName = fullName; if (cargo !== undefined) p.cargo = cargo || null; }
+  if (data.profile && data.profile.id === userId) {
+    if (fullName !== undefined) data.profile.fullName = fullName;
+    if (cargo !== undefined) data.profile.cargo = cargo || null;
+  }
   notify();
 }
 
