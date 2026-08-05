@@ -737,27 +737,20 @@ export function renderBTs() {
 }
 
 // ============ PANEL DE REVISION (revisora / admin) ============
-let panelFilter = 'pending';
+// Foco en revisar por trabajador: cada fila lleva a todo lo de esa persona,
+// en vez de mezclar las boletas de todos en un solo feed.
 export function renderReviewerPanel() {
   const workers = store.getAllProfiles().filter((p) => p.role === 'worker');
   const workerRows = workers.map((w) => {
     const t = store.totals(w.id);
     const pending = store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length;
     return `<div class="manage-row">
-      <span class="nm">${esc(w.fullName || w.rut)}<br><span class="muted tiny">Saldo ${formatMoney(t.availableBalance, cur())} ${pending ? '- ' + pending + ' sin revisar' : ''}</span></span>
-      <button data-edit-worker="${w.id}">Editar</button>
+      <button class="nm" data-open-worker="${w.id}" style="text-align:left;background:none;border:0;padding:0;flex:1">
+        ${esc(w.fullName || w.rut)}<br><span class="muted tiny">Saldo ${formatMoney(t.availableBalance, cur())} ${pending ? '- ' + pending + ' sin revisar' : ''}</span>
+      </button>
       <button data-remind="${w.id}">Recordar</button>
-      <button data-fund="${w.id}">+ Fondo</button>
     </div>`;
   }).join('');
-
-  const chips = `
-    <div class="chips">
-      <button class="chip ${panelFilter === 'pending' ? 'active' : ''}" data-pf="pending">Pendientes</button>
-      <button class="chip ${panelFilter === 'all' ? 'active' : ''}" data-pf="all">Todos</button>
-      <button class="chip ${panelFilter === 'objected' ? 'active' : ''}" data-pf="objected">Objetados</button>
-      <button class="chip ${panelFilter === 'clarification_requested' ? 'active' : ''}" data-pf="clarification_requested">Aclaracion</button>
-    </div>`;
 
   const html = `
     <div class="row between" style="margin-bottom:4px">
@@ -765,28 +758,79 @@ export function renderReviewerPanel() {
       <button class="mini-link" data-action="broadcast">📢 Aviso general</button>
     </div>
     ${workers.length ? workerRows : emptyInline('', 'Sin trabajadores aun', 'Apareceran aqui cuando se registren')}
-
-    <div class="row between" style="margin:18px 2px 8px">
-      <div class="section-title" style="margin:0">Gastos subidos</div>
-    </div>
-    ${chips}
-    <div id="panelExpList"></div>
   `;
   return { html, mount: (root) => {
     root.querySelector('[data-action="broadcast"]')?.addEventListener('click', () => openBroadcastForm());
-    root.querySelectorAll('[data-edit-worker]').forEach((b) => b.onclick = () => openProfileForm(b.dataset.editWorker));
-    root.querySelectorAll('[data-remind]').forEach((b) => b.onclick = () => sendManualReminder(b.dataset.remind, 'manual_reminder'));
-    root.querySelectorAll('[data-fund]').forEach((b) => b.onclick = () => openTransferForm(null, b.dataset.fund));
-    root.querySelectorAll('[data-pf]').forEach((b) => b.onclick = () => { panelFilter = b.dataset.pf; navigate('panel'); });
+    root.querySelectorAll('[data-open-worker]').forEach((b) => b.onclick = () => navigate('panelWorker/' + b.dataset.openWorker));
+    root.querySelectorAll('[data-remind]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); sendManualReminder(b.dataset.remind, 'manual_reminder'); });
+  }};
+}
 
-    const wrap = root.querySelector('#panelExpList');
-    let expenses = store.getAllExpenses();
-    if (panelFilter !== 'all') expenses = expenses.filter((e) => e.reviewStatus === panelFilter);
-    wrap.innerHTML = `<div class="list">${expenses.length ? expenses.slice(0, 60).map((e) => expenseItem(e, { showOwner: true })).join('') : emptyInline('👍', 'Nada por aqui', 'No hay gastos en este filtro')}</div>`;
-    hydrateThumbs(wrap);
-    wrap.querySelectorAll('[data-action="expense"]').forEach((el) =>
+// ============ DETALLE DE TRABAJADOR (vista de revisora) ============
+// Todo lo de un trabajador en un solo lugar: saldo, sus rendiciones, sus
+// gastos sueltos por revisar, y las acciones de edicion/notificacion/fondo.
+export function renderReviewerWorkerDetail(workerId) {
+  const w = store.getProfileById(workerId);
+  if (!w) return { html: emptyInline('🤔', 'Trabajador no encontrado', ''), mount: () => {} };
+  const t = store.totals(workerId);
+  const reports = store.getReports(workerId);
+  const loose = store.getUnassignedExpenses(workerId);
+
+  const reportRows = reports.map((r) => {
+    const total = store.reportTotal(r.id);
+    const count = store.getReportExpenses(r.id).length;
+    return `<button class="item" data-open-report="${r.id}">
+      <span class="emoji">📋</span>
+      <span class="body">
+        <span class="t">${esc(r.title)} ${reportStatusBadge(r.status)}</span>
+        <span class="s">${monthLabel(r.period)} - ${count} gasto(s)</span>
+      </span>
+      <span class="amt mono">${formatMoney(total, cur())}</span>
+    </button>`;
+  }).join('');
+
+  const html = `
+    <div class="card">
+      <div class="muted tiny">${esc(w.rut)}</div>
+      <h2 style="margin:4px 0 10px;font-size:20px">${esc(w.fullName || w.rut)}</h2>
+      <div class="balance-grid">
+        <div><span>Recibido</span><b class="mono">${formatMoney(t.receivedTotal, cur())}</b></div>
+        <div><span>Gastado</span><b class="mono">${formatMoney(t.spentTotal, cur())}</b></div>
+      </div>
+      <div class="row between" style="margin-top:10px">
+        <span class="muted">Saldo disponible</span>
+        <b class="mono" style="font-size:19px">${formatMoney(t.availableBalance, cur())}</b>
+      </div>
+    </div>
+
+    <div class="report-actions no-print">
+      <button class="btn outline" data-act="edit">Editar datos</button>
+      <button class="btn outline" data-act="fund">+ Fondo</button>
+      <button class="btn primary" data-act="remind">Notificar</button>
+    </div>
+
+    <div class="section-title" style="margin-top:18px">Rendiciones (${reports.length})</div>
+    <div class="list">${reports.length ? reportRows : emptyInline('', 'Sin rendiciones', 'Aun no crea ninguna')}</div>
+
+    ${loose.length ? `
+      <div class="section-title" style="margin-top:18px">Gastos sin rendicion (${loose.length})</div>
+      <div class="list">${loose.map((e) => expenseItem(e)).join('')}</div>
+    ` : ''}
+  `;
+  return { html, mount: (root) => {
+    hydrateThumbs(root);
+    root.querySelector('[data-act="edit"]').onclick = () => openProfileForm(workerId);
+    root.querySelector('[data-act="fund"]').onclick = () => openTransferForm(null, workerId);
+    root.querySelector('[data-act="remind"]').onclick = () => sendManualReminder(workerId, 'manual_reminder');
+    root.querySelectorAll('[data-open-report]').forEach((b) => b.onclick = () => navigate('panelReport/' + b.dataset.openReport));
+    root.querySelectorAll('[data-action="expense"]').forEach((el) =>
       el.addEventListener('click', () => navigate('panelExpense/' + el.dataset.id)));
   }};
+}
+
+const REPORT_STATUS_LABEL = { draft: '', submitted: '🕓 Enviada', approved: '✅ Cerrada', needs_changes: '❗ Con observaciones' };
+function reportStatusBadge(status) {
+  return REPORT_STATUS_LABEL[status] || '';
 }
 
 // ============ DETALLE DE GASTO (vista de revisora) ============
@@ -841,10 +885,12 @@ export function renderReviewerReportDetail(id) {
   const total = store.reportTotal(id);
   const bal = store.reportBalance(id);
 
+  const isClosed = r.status === 'approved';
+
   const html = `
     <div class="card">
       <div class="muted tiny">${esc(owner?.fullName || owner?.rut || '')}</div>
-      <h2 style="margin:6px 0 2px;font-size:21px">${esc(r.title)}</h2>
+      <h2 style="margin:6px 0 2px;font-size:21px">${esc(r.title)} ${reportStatusBadge(r.status)}</h2>
       <div class="muted">${r.rendNumber ? 'Rend. N ' + esc(r.rendNumber) + ' - ' : ''}${monthLabel(r.period)}</div>
       ${r.obra ? `<div class="muted tiny" style="margin-top:2px">${esc(r.obra)}</div>` : ''}
       <hr class="hr"/>
@@ -855,6 +901,8 @@ export function renderReviewerReportDetail(id) {
     <div class="report-actions no-print">
       <button class="btn outline" data-act="download">Descargar rendicion</button>
       <button class="btn outline" data-act="download-receipts">Descargar boletas</button>
+      <button class="btn ${isClosed ? 'outline' : 'primary'}" data-act="toggle-close">${isClosed ? 'Reabrir rendicion' : 'Cerrar rendicion'}</button>
+      <button class="btn outline" data-act="notify">Notificar al trabajador</button>
     </div>
     <div class="section-title">Gastos incluidos</div>
     <div class="list">${expenses.length ? expenses.map((e) => expenseItem(e)).join('') : emptyInline('🧾', 'Sin gastos', '')}</div>
@@ -863,6 +911,15 @@ export function renderReviewerReportDetail(id) {
     hydrateThumbs(root);
     root.querySelector('[data-act="download"]')?.addEventListener('click', () => downloadRendicion(r));
     root.querySelector('[data-act="download-receipts"]')?.addEventListener('click', () => downloadReceipts(r));
+    root.querySelector('[data-act="notify"]')?.addEventListener('click', () => sendManualReminder(r.ownerId, 'closure_reminder'));
+    root.querySelector('[data-act="toggle-close"]')?.addEventListener('click', async () => {
+      const next = isClosed ? 'draft' : 'approved';
+      try {
+        await store.updateReport(r.id, { status: next });
+        toast(isClosed ? 'Rendicion reabierta' : 'Rendicion cerrada', 'ok');
+        navigate('panelReport/' + r.id);
+      } catch (e) { toast('No se pudo cambiar: ' + (e.message || e), 'err'); }
+    });
     root.querySelectorAll('[data-action="expense"]').forEach((el) =>
       el.addEventListener('click', () => navigate('panelExpense/' + el.dataset.id)));
   }};

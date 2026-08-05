@@ -5,13 +5,24 @@ import { startRouter, onRoute, navigate } from './router.js';
 import {
   renderDashboard, renderExpenses, renderReports, renderReportDetail,
   renderStats, renderSettings, renderBTs,
-  renderReviewerPanel, renderReviewerExpenseDetail, renderReviewerReportDetail,
+  renderReviewerPanel, renderReviewerWorkerDetail, renderReviewerExpenseDetail, renderReviewerReportDetail,
   renderAdminPanel
 } from './views.js';
 import { openExpenseForm } from './forms.js';
 import { esc } from './utils.js';
 
 const appEl = document.getElementById('app');
+
+// Captura el evento de instalacion de PWA apenas el navegador lo ofrezca
+// (puede disparar en cualquier momento, por eso se escucha desde ya).
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
 
 // Config de cada pantalla
 const SCREENS = {
@@ -22,7 +33,8 @@ const SCREENS = {
   settings:  { title: 'Ajustes', render: renderSettings, nav: 'settings' },
   bts:       { title: 'BT / Proyectos', render: renderBTs, nav: 'settings', back: 'settings' },
   report:    { title: 'Rendicion', render: (id) => renderReportDetail(id), nav: 'reports', back: 'reports' },
-  panel:        { title: 'Panel', sub: 'Todo lo que se sube', render: renderReviewerPanel, nav: 'panel' },
+  panel:        { title: 'Panel', sub: 'Revision por trabajador', render: renderReviewerPanel, nav: 'panel' },
+  panelWorker:  { title: 'Trabajador', render: (id) => renderReviewerWorkerDetail(id), nav: 'panel', back: 'panel' },
   panelExpense: { title: 'Gasto', render: (id) => renderReviewerExpenseDetail(id), nav: 'panel', back: 'panel' },
   panelReport:  { title: 'Rendicion', render: (id) => renderReviewerReportDetail(id), nav: 'panel', back: 'panel' },
   admin:        { title: 'Administracion', render: renderAdminPanel, nav: 'panel', back: 'panel' }
@@ -174,6 +186,7 @@ export async function boot() {
   if (!booted) {
     booted = true;
     registerServiceWorker();
+    await maybeShowInstallPrompt();
     await maybeShowPushPrompt();
     unsubStore = store.subscribe(() => { if (currentRoute) renderShell(currentRoute); });
     stopRoute = onRoute((route) => { currentRoute = route; renderShell(route); });
@@ -181,6 +194,35 @@ export async function boot() {
   } else if (currentRoute) {
     renderShell(currentRoute);
   }
+}
+
+// Pantalla previa al shell ofreciendo instalar la PWA. Instalada, las
+// notificaciones funcionan de forma confiable (en pestaña de navegador
+// suelta, Android/Chrome puede simplemente no mostrarlas). No aparece si
+// ya esta instalada, si el navegador no ofrecio el evento (Safari/iOS no
+// lo soporta), o si ya se instalo/descarto antes en esta carga.
+async function maybeShowInstallPrompt() {
+  if (isStandalone() || !deferredInstallPrompt) return;
+
+  await new Promise((resolve) => {
+    appEl.innerHTML = `
+      <div class="auth-screen" style="padding:32px 20px;max-width:420px;margin:0 auto;text-align:center">
+        <div style="font-size:48px;margin-bottom:12px">📲</div>
+        <h1 style="margin-bottom:8px">Instala RindeApp Cloud</h1>
+        <p class="muted" style="margin-bottom:24px">Instalada en tu celular se abre como cualquier otra app y las notificaciones llegan de forma confiable.</p>
+        <button class="btn primary" data-install style="width:100%;margin-bottom:10px">Instalar app</button>
+        <button class="btn ghost" data-skip style="width:100%">Ahora no</button>
+      </div>`;
+    appEl.querySelector('[data-install]').onclick = async () => {
+      try {
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+      } catch (e) { /* si falla, sigue de largo */ }
+      deferredInstallPrompt = null;
+      resolve();
+    };
+    appEl.querySelector('[data-skip]').onclick = () => resolve();
+  });
 }
 
 // Pantalla previa al shell, apenas se entra, pidiendo activar notificaciones
