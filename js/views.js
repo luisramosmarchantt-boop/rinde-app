@@ -663,7 +663,7 @@ export function renderTeamMetrics() {
     months.push({ ym, total: mTotal });
   }
 
-  const workers = store.getAllProfiles().filter((p) => p.role === 'worker');
+  const workers = controllableProfiles();
   const ranking = workers.map((w) => {
     const wExpenses = expenses.filter((e) => e.ownerId === w.id);
     const pending = store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length;
@@ -716,7 +716,7 @@ const NOTIF_TYPE_LABEL = {
   approved: 'Aprobacion', adjusted: 'Ajuste', clarification_requested: 'Aclaracion', broadcast: 'Aviso general', manual: 'Manual'
 };
 export function renderNotificationsHub() {
-  const workers = store.getAllProfiles().filter((p) => p.role === 'worker');
+  const workers = controllableProfiles();
   const workerRows = workers.map((w) => `
     <div class="manage-row">
       <span class="nm">${esc(w.fullName || w.rut)}</span>
@@ -857,12 +857,20 @@ export function renderBTs() {
   }};
 }
 
+// Cuentas que la revisora/admin puede controlar como si fueran trabajadores:
+// los workers y tambien el admin (el es quien rinde sus propios gastos), pero
+// nunca uno mismo (para no aparecer en el propio Panel).
+function controllableProfiles() {
+  return store.getAllProfiles().filter((p) =>
+    (p.role === 'worker' || p.role === 'admin') && p.id !== store.myUserId());
+}
+
 // ============ PANEL DE REVISION (revisora / admin) ============
 // Foco en revisar por trabajador: cada fila lleva a todo lo de esa persona,
 // en vez de mezclar las boletas de todos en un solo feed. Notificar y
 // avisos generales viven aparte, en la seccion de Notificaciones.
 export function renderReviewerPanel() {
-  const workers = store.getAllProfiles().filter((p) => p.role === 'worker');
+  const workers = controllableProfiles();
   const workerRows = workers.map((w) => {
     const t = store.totals(w.id);
     const pending = store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length;

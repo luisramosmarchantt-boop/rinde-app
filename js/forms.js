@@ -510,7 +510,8 @@ export async function sendManualReminder(ownerId, kind = 'manual_reminder') {
 
 // ---------- Aviso a trabajadores elegidos, o a todos (revisora/admin) ----------
 export function openBroadcastForm() {
-  const workers = store.getAllProfiles().filter((p) => p.role === 'worker');
+  const workers = store.getAllProfiles().filter((p) =>
+    (p.role === 'worker' || p.role === 'admin') && p.id !== store.myUserId());
   const rows = workers.map((w) =>
     `<label class="manage-row">
       <input type="checkbox" data-wid="${w.id}" checked style="width:20px;height:20px"/>
