@@ -11,7 +11,7 @@ import { navigate } from './router.js';
 import {
   openExpenseForm, openReportForm, openAssignExpenses,
   openProfileForm, openBTForm, openTransferForm, openReviewForm, sendManualReminder,
-  openBroadcastForm
+  openBroadcastForm, openImportBackupForm
 } from './forms.js';
 import { LOGO_DATAURL } from './assets.js';
 import { newDoc, shareFiles, pdfFile } from './pdf.js';
@@ -785,6 +785,12 @@ export function renderSettings() {
       </button>
     </div>
 
+    <div class="section-title">Migracion</div>
+    <div class="settings-list">
+      <button class="si" data-act="import-backup"><span class="ic">📥</span><span class="lbl">Importar respaldo (Rendiciones App)</span><span class="chev"></span></button>
+    </div>
+    <p class="muted tiny" style="margin:-6px 2px 12px">Herramienta temporal para traer el historial de la app anterior. Se retirara cuando termine la migracion.</p>
+
     <div class="section-title">Cuenta</div>
     <div class="settings-list">
       <button class="si" data-act="logout"><span class="ic">🚪</span><span class="lbl" style="color:var(--danger)">Cerrar sesion</span><span class="chev"></span></button>
@@ -800,6 +806,7 @@ export function renderSettings() {
     root.querySelector('[data-act="bts"]').onclick = () => navigate('bts');
     root.querySelector('[data-act="panel"]')?.addEventListener('click', () => navigate('panel'));
     root.querySelector('[data-act="admin"]')?.addEventListener('click', () => navigate('admin'));
+    root.querySelector('[data-act="import-backup"]').onclick = () => openImportBackupForm();
     root.querySelector('[data-act="logout"]').onclick = async () => {
       const ok = await confirmDialog({ title: 'Cerrar sesion', message: 'Volveras a la pantalla de ingreso.', confirmText: 'Cerrar sesion' });
       if (ok) { const { logout } = await import('./app.js'); await logout(); }

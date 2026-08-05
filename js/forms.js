@@ -558,3 +558,67 @@ export function openBroadcastForm() {
     };
   }});
 }
+
+// ---------- Importar respaldo de Rendiciones App (herramienta de migracion) ----------
+export function openImportBackupForm() {
+  let file = null;
+
+  const html = `
+    <div class="sheet-head"><h2>Importar respaldo</h2><button class="x" data-close>x</button></div>
+    <p class="muted" style="margin-top:-4px">Elige el archivo de respaldo (.json) que exporta Rendiciones App. Se importara a tu propia cuenta: tus rendiciones, fondos, gastos y boletas.</p>
+    <input type="file" accept=".json,application/json" id="backupInput" hidden />
+    <button type="button" class="btn outline" data-pick style="width:100%;margin-top:10px">Elegir archivo</button>
+    <p class="muted tiny" id="fileName" style="margin-top:8px"></p>
+    <div id="importStatus" class="muted tiny" style="margin-top:10px"></div>
+    <button class="btn primary" data-save style="width:100%;margin-top:14px" disabled>Importar</button>
+  `;
+  openSheet(html, { full: true, dismissible: false, onMount: (root, close) => {
+    root.querySelector('[data-close]').onclick = () => close();
+    const input = root.querySelector('#backupInput');
+    const nameEl = root.querySelector('#fileName');
+    const statusEl = root.querySelector('#importStatus');
+    const saveBtn = root.querySelector('[data-save]');
+
+    root.querySelector('[data-pick]').onclick = () => input.click();
+    input.onchange = () => {
+      file = input.files[0] || null;
+      nameEl.textContent = file ? file.name : '';
+      saveBtn.disabled = !file;
+    };
+
+    saveBtn.onclick = async () => {
+      if (!file) return;
+      const ok = await confirmDialog({
+        title: 'Importar respaldo',
+        message: 'Se crearan rendiciones, fondos y gastos nuevos en tu cuenta a partir de este archivo. Los gastos ya existentes (mismo documento, o mismo monto y fecha) se saltan automaticamente. Continuar?',
+        confirmText: 'Importar'
+      });
+      if (!ok) return;
+
+      saveBtn.disabled = true;
+      root.querySelector('[data-pick]').disabled = true;
+      try {
+        const { parseBackupFile, runImport } = await import('./migrationImport.js');
+        statusEl.textContent = 'Leyendo archivo...';
+        const backup = await parseBackupFile(file);
+        const result = await runImport(backup, (msg) => { statusEl.textContent = msg; });
+        statusEl.innerHTML = `
+          Listo: ${result.reports} rendicion(es), ${result.transfers} fondo(s), ${result.expenses} gasto(s) importados.<br>
+          ${result.skippedExpenses ? result.skippedExpenses + ' gasto(s) ya existian y se saltaron.<br>' : ''}
+          ${result.bts ? result.bts + ' BT/proyecto(s) nuevas creadas.<br>' : ''}
+          ${result.skippedBts ? result.skippedBts + ' BT(s) no se pudieron crear (sin permiso) y quedaron sin asignar.<br>' : ''}
+          ${result.errors.length ? '<span style="color:var(--danger)">' + result.errors.length + ' error(es): ' + esc(result.errors.slice(0, 5).join(' | ')) + '</span>' : ''}
+        `;
+        toast('Importacion terminada', 'ok');
+        saveBtn.textContent = 'Cerrar';
+        saveBtn.disabled = false;
+        saveBtn.onclick = () => close();
+      } catch (e) {
+        statusEl.textContent = '';
+        toast('No se pudo importar: ' + (e.message || e), 'err');
+        saveBtn.disabled = false;
+        root.querySelector('[data-pick]').disabled = false;
+      }
+    };
+  }});
+}

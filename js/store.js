@@ -349,8 +349,9 @@ export async function deleteReport(id, { deleteExpenses = false } = {}) {
 
 // ===== BT / Proyectos (solo admin puede escribir, RLS lo exige) =====
 export async function addBT({ code, name }) {
-  const { error } = await supabase.from('bts').insert({ code: (code || '').trim(), name: (name || '').trim(), created_by: currentUserId });
+  const { data: row, error } = await supabase.from('bts').insert({ code: (code || '').trim(), name: (name || '').trim(), created_by: currentUserId }).select().single();
   if (error) throw error;
+  return row.id;
 }
 export async function updateBT(id, patch) {
   const dbPatch = {};
