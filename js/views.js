@@ -646,6 +646,112 @@ export function renderStats() {
   }};
 }
 
+// ============ METRICAS DEL EQUIPO (revisora / admin) ============
+let teamMetricsRange = 'month';
+export function renderTeamMetrics() {
+  let expenses = store.getAllExpenses();
+  if (teamMetricsRange === 'month') expenses = expenses.filter((e) => monthKey(e.date) === monthKey(undefined));
+  const total = expenses.reduce((a, e) => a + store.finalAmount(e), 0);
+  const catData = store.byCategory(expenses);
+
+  const months = [];
+  const base = new Date(); base.setDate(1);
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const mTotal = store.getAllExpenses().filter((e) => monthKey(e.date) === ym).reduce((a, e) => a + store.finalAmount(e), 0);
+    months.push({ ym, total: mTotal });
+  }
+
+  const workers = store.getAllProfiles().filter((p) => p.role === 'worker');
+  const ranking = workers.map((w) => {
+    const wExpenses = expenses.filter((e) => e.ownerId === w.id);
+    const pending = store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length;
+    return { worker: w, total: wExpenses.reduce((a, e) => a + store.finalAmount(e), 0), count: wExpenses.length, pending };
+  }).sort((a, b) => b.total - a.total);
+  const totalPending = ranking.reduce((a, r) => a + r.pending, 0);
+
+  const html = `
+    <div class="chips" style="margin-bottom:10px">
+      <button class="chip ${teamMetricsRange === 'month' ? 'active' : ''}" data-range="month">Este mes</button>
+      <button class="chip ${teamMetricsRange === 'all' ? 'active' : ''}" data-range="all">Todo</button>
+    </div>
+
+    <div class="kpis" style="margin-bottom:6px">
+      <div class="kpi"><div class="v mono">${formatMoney(total, cur())}</div><div class="k">Total equipo ${teamMetricsRange === 'month' ? 'del mes' : 'historico'}</div></div>
+      <div class="kpi"><div class="v">${expenses.length}</div><div class="k">Gastos registrados</div></div>
+      <div class="kpi"><div class="v">${workers.length}</div><div class="k">Trabajadores</div></div>
+      <div class="kpi"><div class="v">${totalPending}</div><div class="k">Pendientes de revisar</div></div>
+    </div>
+
+    <div class="section-title">Evolucion del equipo (ultimos 6 meses)</div>
+    <div class="card">${monthBars(months, cur())}</div>
+
+    <div class="section-title">Por categoria</div>
+    <div class="card">
+      ${catData.length ? donutChart(catData, cur()) : '<p class="muted center" style="padding:14px 0">Sin datos en este periodo</p>'}
+    </div>
+
+    <div class="section-title">Ranking por trabajador</div>
+    <div class="list">
+      ${ranking.length ? ranking.map((r) => `<button class="item" data-open-worker="${r.worker.id}">
+        <span class="emoji">👤</span>
+        <span class="body">
+          <span class="t">${esc(r.worker.fullName || r.worker.rut)}</span>
+          <span class="s">${r.count} gasto(s)${r.pending ? ' - ' + r.pending + ' sin revisar' : ''}</span>
+        </span>
+        <span class="amt mono">${formatMoney(r.total, cur())}</span>
+      </button>`).join('') : emptyInline('', 'Sin trabajadores aun', '')}
+    </div>
+  `;
+  return { html, mount: (root) => {
+    root.querySelectorAll('[data-range]').forEach((b) => b.addEventListener('click', () => { teamMetricsRange = b.dataset.range; navigate('metrics'); }));
+    root.querySelectorAll('[data-open-worker]').forEach((b) => b.onclick = () => navigate('panelWorker/' + b.dataset.openWorker));
+  }};
+}
+
+// ============ NOTIFICACIONES (revisora / admin) ============
+const NOTIF_TYPE_LABEL = {
+  manual_reminder: 'Recordatorio', closure_reminder: 'Cierre de rendicion', objected: 'Objecion',
+  approved: 'Aprobacion', adjusted: 'Ajuste', clarification_requested: 'Aclaracion', broadcast: 'Aviso general', manual: 'Manual'
+};
+export function renderNotificationsHub() {
+  const workers = store.getAllProfiles().filter((p) => p.role === 'worker');
+  const workerRows = workers.map((w) => `
+    <div class="manage-row">
+      <span class="nm">${esc(w.fullName || w.rut)}</span>
+      <button data-remind="${w.id}">Recordar</button>
+      <button data-close-remind="${w.id}">Cierre</button>
+    </div>`).join('');
+
+  const html = `
+    <button class="btn primary" data-action="broadcast" style="width:100%;margin-bottom:16px">📢 Enviar aviso general</button>
+
+    <div class="section-title">Recordatorios individuales</div>
+    ${workers.length ? workerRows : emptyInline('', 'Sin trabajadores aun', '')}
+
+    <div class="section-title" style="margin-top:18px">Historial reciente</div>
+    <div id="notifLog"><p class="muted center">Cargando...</p></div>
+  `;
+  return { html, mount: async (root) => {
+    root.querySelector('[data-action="broadcast"]').onclick = () => openBroadcastForm();
+    root.querySelectorAll('[data-remind]').forEach((b) => b.onclick = () => sendManualReminder(b.dataset.remind, 'manual_reminder'));
+    root.querySelectorAll('[data-close-remind]').forEach((b) => b.onclick = () => sendManualReminder(b.dataset.closeRemind, 'closure_reminder'));
+
+    const log = await store.getRecentNotifications(30);
+    const wrap = root.querySelector('#notifLog');
+    if (!log.length) { wrap.innerHTML = '<p class="muted center">Sin notificaciones enviadas aun</p>'; return; }
+    wrap.innerHTML = log.map((n) => {
+      const recipient = store.getProfileById(n.recipientId);
+      return `<div class="card tight" style="margin-bottom:8px">
+        <div class="row between"><b>${esc(n.title)}</b><span class="muted tiny">${formatDate(new Date(n.createdAt).toISOString().slice(0, 10))}</span></div>
+        <div class="muted tiny">${esc(recipient?.fullName || recipient?.rut || 'Trabajador')} - ${NOTIF_TYPE_LABEL[n.type] || n.type}</div>
+        ${n.body ? `<div class="tiny" style="margin-top:4px">${esc(n.body)}</div>` : ''}
+      </div>`;
+    }).join('');
+  }};
+}
+
 // ============ AJUSTES ============
 export function renderSettings() {
   const p = store.getProfile();
@@ -746,31 +852,29 @@ export function renderBTs() {
 
 // ============ PANEL DE REVISION (revisora / admin) ============
 // Foco en revisar por trabajador: cada fila lleva a todo lo de esa persona,
-// en vez de mezclar las boletas de todos en un solo feed.
+// en vez de mezclar las boletas de todos en un solo feed. Notificar y
+// avisos generales viven aparte, en la seccion de Notificaciones.
 export function renderReviewerPanel() {
   const workers = store.getAllProfiles().filter((p) => p.role === 'worker');
   const workerRows = workers.map((w) => {
     const t = store.totals(w.id);
     const pending = store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length;
-    return `<div class="manage-row">
-      <button class="nm" data-open-worker="${w.id}" style="text-align:left;background:none;border:0;padding:0;flex:1">
-        ${esc(w.fullName || w.rut)}<br><span class="muted tiny">Saldo ${formatMoney(t.availableBalance, cur())} ${pending ? '- ' + pending + ' sin revisar' : ''}</span>
-      </button>
-      <button data-remind="${w.id}">Recordar</button>
-    </div>`;
+    return `<button class="item" data-open-worker="${w.id}">
+      <span class="emoji">👤</span>
+      <span class="body">
+        <span class="t">${esc(w.fullName || w.rut)}</span>
+        <span class="s">${pending ? pending + ' sin revisar' : 'Al dia'}</span>
+      </span>
+      <span class="amt mono">${formatMoney(t.availableBalance, cur())}</span>
+    </button>`;
   }).join('');
 
   const html = `
-    <div class="row between" style="margin-bottom:4px">
-      <div class="section-title" style="margin:0">Trabajadores (${workers.length})</div>
-      <button class="mini-link" data-action="broadcast">📢 Aviso general</button>
-    </div>
-    ${workers.length ? workerRows : emptyInline('', 'Sin trabajadores aun', 'Apareceran aqui cuando se registren')}
+    <div class="section-title" style="margin-bottom:4px">Trabajadores (${workers.length})</div>
+    <div class="list">${workers.length ? workerRows : emptyInline('', 'Sin trabajadores aun', 'Apareceran aqui cuando se registren')}</div>
   `;
   return { html, mount: (root) => {
-    root.querySelector('[data-action="broadcast"]')?.addEventListener('click', () => openBroadcastForm());
     root.querySelectorAll('[data-open-worker]').forEach((b) => b.onclick = () => navigate('panelWorker/' + b.dataset.openWorker));
-    root.querySelectorAll('[data-remind]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); sendManualReminder(b.dataset.remind, 'manual_reminder'); });
   }};
 }
 
@@ -948,6 +1052,9 @@ export function renderAdminPanel() {
     </div>`).join('');
 
   const html = `
+    <div class="section-title">Control del equipo</div>
+    <button class="btn outline" data-act="metrics" style="width:100%;margin-bottom:8px">📊 Metricas del equipo</button>
+    <button class="btn outline" data-act="notifications" style="width:100%;margin-bottom:14px">🔔 Notificaciones</button>
     <div class="section-title">BT / Proyectos</div>
     <button class="btn outline" data-act="bts" style="width:100%;margin-bottom:14px">Gestionar BT / Proyectos</button>
     <div class="section-title">Cuentas (${profiles.length})</div>
@@ -955,6 +1062,8 @@ export function renderAdminPanel() {
   `;
   return { html, mount: (root) => {
     root.querySelector('[data-act="bts"]').onclick = () => navigate('bts');
+    root.querySelector('[data-act="metrics"]').onclick = () => navigate('metrics');
+    root.querySelector('[data-act="notifications"]').onclick = () => navigate('notifications');
     root.querySelectorAll('[data-role]').forEach((sel) => sel.onchange = async () => {
       const ok = await confirmDialog({ title: 'Cambiar rol', message: `Se cambiara el rol de esta cuenta a "${roleLabelText(sel.value)}".`, confirmText: 'Cambiar' });
       if (!ok) { navigate('admin'); return; }

@@ -6,7 +6,7 @@ import {
   renderDashboard, renderExpenses, renderReports, renderReportDetail,
   renderStats, renderSettings, renderBTs,
   renderReviewerPanel, renderReviewerWorkerDetail, renderReviewerExpenseDetail, renderReviewerReportDetail,
-  renderAdminPanel
+  renderAdminPanel, renderTeamMetrics, renderNotificationsHub
 } from './views.js';
 import { openExpenseForm } from './forms.js';
 import { esc } from './utils.js';
@@ -27,10 +27,26 @@ const SCREENS = {
   panelWorker:  { title: 'Trabajador', render: (id) => renderReviewerWorkerDetail(id), nav: 'panel', back: 'panel' },
   panelExpense: { title: 'Gasto', render: (id) => renderReviewerExpenseDetail(id), nav: 'panel', back: 'panel' },
   panelReport:  { title: 'Rendicion', render: (id) => renderReviewerReportDetail(id), nav: 'panel', back: 'panel' },
-  admin:        { title: 'Administracion', render: renderAdminPanel, nav: 'panel', back: 'panel' }
+  admin:        { title: 'Administracion', render: renderAdminPanel, nav: 'panel', back: 'panel' },
+  metrics:       { title: 'Metricas', sub: 'Todo el equipo', render: renderTeamMetrics, nav: 'metrics' },
+  notifications: { title: 'Notificaciones', sub: 'Avisar a los trabajadores', render: renderNotificationsHub, nav: 'notifications' }
 };
 
 function navFor(role) {
+  // La revisora "pura" (no admin) usa una barra de control: sin Gastos/
+  // Rendiciones propias (ella no rinde), con Metricas y Notificaciones en
+  // su lugar. El admin mantiene la barra original (rinde sus propios
+  // gastos) y llega a Metricas/Notificaciones desde el Panel de Administracion.
+  if (role === 'reviewer') {
+    return [
+      { id: 'dashboard', label: 'Inicio', ic: '🏠', route: 'dashboard' },
+      { id: 'metrics', label: 'Metricas', ic: '📊', route: 'metrics' },
+      { id: 'fab', fab: true },
+      { id: 'panel', label: 'Panel', ic: '🔎', route: 'panel' },
+      { id: 'notifications', label: 'Notif.', ic: '🔔', route: 'notifications' },
+      { id: 'settings', label: 'Ajustes', ic: '⚙️', route: 'settings' }
+    ];
+  }
   const base = [
     { id: 'dashboard', label: 'Inicio', ic: '🏠', route: 'dashboard' },
     { id: 'expenses', label: 'Gastos', ic: '🧾', route: 'expenses' },
@@ -38,7 +54,7 @@ function navFor(role) {
     { id: 'reports', label: 'Rendiciones', ic: '📋', route: 'reports' },
     { id: 'settings', label: 'Ajustes', ic: '⚙️', route: 'settings' }
   ];
-  if (role === 'reviewer' || role === 'admin') {
+  if (role === 'admin') {
     base.splice(3, 0, { id: 'panel', label: 'Panel', ic: '🔎', route: 'panel' });
   }
   return base;

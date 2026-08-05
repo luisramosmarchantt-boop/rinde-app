@@ -2,7 +2,7 @@
 // Cache de la "app shell" (los datos en si viven en Supabase, no aca).
 // Ademas maneja notificaciones Web Push.
 
-const CACHE = 'rindeapp-cloud-v2';
+const CACHE = 'rindeapp-cloud-v3';
 const RUNTIME = 'rindeapp-cloud-runtime-v1';
 const ASSETS = [
   './',

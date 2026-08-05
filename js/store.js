@@ -294,6 +294,18 @@ export async function addComment(targetType, targetId, body) {
   if (error) throw error;
 }
 
+// Historial de notificaciones enviadas (revisora/admin). Se consulta al
+// vuelo, no vive en la cache en memoria porque es solo para mostrar un log.
+export async function getRecentNotifications(limit = 30) {
+  const { data: rows, error } = await supabase.from('notifications_log')
+    .select('*').order('created_at', { ascending: false }).limit(limit);
+  if (error) { console.error(error); return []; }
+  return rows.map((r) => ({
+    id: r.id, recipientId: r.recipient_id, type: r.type, title: r.title, body: r.body,
+    sentBy: r.sent_by, createdAt: new Date(r.created_at).getTime()
+  }));
+}
+
 // ===== Mutaciones: rendiciones =====
 export async function addReport(ownerId, payload) {
   const { data: row, error } = await supabase.from('reports').insert({
