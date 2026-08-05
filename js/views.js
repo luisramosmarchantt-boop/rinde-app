@@ -15,6 +15,7 @@ import {
 } from './forms.js';
 import { LOGO_DATAURL } from './assets.js';
 import { newDoc, shareFiles, pdfFile } from './pdf.js';
+import { canInstall, promptInstall } from './installPrompt.js';
 
 const cur = () => 'CLP';
 
@@ -80,6 +81,12 @@ export function renderDashboard() {
       <button class="qa" data-action="report"><b>+ Rendicion</b><span>Agrupar gastos</span></button>
     </div>
 
+    ${canInstall() ? `
+    <button class="notice-card" data-action="install">
+      <span><b>📲 Instalar app</b></span>
+      <small>Para que las notificaciones lleguen bien</small>
+    </button>` : ''}
+
     ${t.unassignedCount > 0 ? `
     <button class="notice-card" data-action="goexpenses">
       <span><b>${t.unassignedCount}</b> gasto(s) sin rendicion</span>
@@ -116,6 +123,7 @@ export function renderDashboard() {
   return { html, mount: (root) => {
     hydrateThumbs(root);
     root.querySelector('[data-action="goexpenses"]')?.addEventListener('click', () => navigate('expenses'));
+    root.querySelector('[data-action="install"]')?.addEventListener('click', async () => { await promptInstall(); navigate('dashboard'); });
     root.querySelectorAll('[data-action="transfer"]').forEach((b) => b.addEventListener('click', () => openTransferForm()));
     root.querySelector('[data-action="expense"]')?.addEventListener('click', () => openExpenseForm());
     root.querySelector('[data-action="report"]')?.addEventListener('click', () => openReportForm());

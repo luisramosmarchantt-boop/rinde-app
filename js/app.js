@@ -10,19 +10,9 @@ import {
 } from './views.js';
 import { openExpenseForm } from './forms.js';
 import { esc } from './utils.js';
+import { canInstall, promptInstall } from './installPrompt.js';
 
 const appEl = document.getElementById('app');
-
-// Captura el evento de instalacion de PWA apenas el navegador lo ofrezca
-// (puede disparar en cualquier momento, por eso se escucha desde ya).
-let deferredInstallPrompt = null;
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredInstallPrompt = e;
-});
-function isStandalone() {
-  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-}
 
 // Config de cada pantalla
 const SCREENS = {
@@ -202,7 +192,7 @@ export async function boot() {
 // ya esta instalada, si el navegador no ofrecio el evento (Safari/iOS no
 // lo soporta), o si ya se instalo/descarto antes en esta carga.
 async function maybeShowInstallPrompt() {
-  if (isStandalone() || !deferredInstallPrompt) return;
+  if (!canInstall()) return;
 
   await new Promise((resolve) => {
     appEl.innerHTML = `
@@ -214,11 +204,7 @@ async function maybeShowInstallPrompt() {
         <button class="btn ghost" data-skip style="width:100%">Ahora no</button>
       </div>`;
     appEl.querySelector('[data-install]').onclick = async () => {
-      try {
-        deferredInstallPrompt.prompt();
-        await deferredInstallPrompt.userChoice;
-      } catch (e) { /* si falla, sigue de largo */ }
-      deferredInstallPrompt = null;
+      await promptInstall();
       resolve();
     };
     appEl.querySelector('[data-skip]').onclick = () => resolve();

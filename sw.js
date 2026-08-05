@@ -27,6 +27,7 @@ const ASSETS = [
   './js/auth.js',
   './js/storage.js',
   './js/push.js',
+  './js/installPrompt.js',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
