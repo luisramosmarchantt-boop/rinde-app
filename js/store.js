@@ -15,7 +15,9 @@ let data = {
   transfers: [],
   reports: [],
   expenses: [],
-  comments: []
+  comments: [],
+  approvalRequests: [],
+  myNotifications: []
 };
 let currentUserId = null;
 let channels = [];
@@ -60,6 +62,19 @@ function mapExpense(row) {
 function mapComment(row) {
   return { id: row.id, targetType: row.target_type, targetId: row.target_id, authorId: row.author_id, body: row.body, createdAt: new Date(row.created_at).getTime() };
 }
+function mapApprovalRequest(row) {
+  return {
+    id: row.id, expenseId: row.expense_id, requestedBy: row.requested_by, requestedTo: row.requested_to,
+    status: row.status, note: row.note, resolutionNote: row.resolution_note,
+    createdAt: new Date(row.created_at).getTime(), resolvedAt: row.resolved_at ? new Date(row.resolved_at).getTime() : null
+  };
+}
+function mapNotification(row) {
+  return {
+    id: row.id, recipientId: row.recipient_id, type: row.type, title: row.title, body: row.body,
+    sentBy: row.sent_by, createdAt: new Date(row.created_at).getTime()
+  };
+}
 
 // Monto que cuenta para saldos/reportes: el ajustado por la revisora si existe.
 export const finalAmount = (e) => (e.approvedAmount != null ? e.approvedAmount : e.amount);
@@ -71,16 +86,18 @@ export async function hydrate() {
   if (!uid) throw new Error('No hay sesion activa');
   currentUserId = uid;
 
-  const [profs, cats, btsRows, trs, reps, exps, rcpts] = await Promise.all([
+  const [profs, cats, btsRows, trs, reps, exps, rcpts, apprs, notifs] = await Promise.all([
     supabase.from('profiles').select('*'),
     supabase.from('categories').select('*').order('sort_order'),
     supabase.from('bts').select('*'),
     supabase.from('transfers').select('*'),
     supabase.from('reports').select('*'),
     supabase.from('expenses').select('*'),
-    supabase.from('expense_receipts').select('*')
+    supabase.from('expense_receipts').select('*'),
+    supabase.from('approval_requests').select('*'),
+    supabase.from('notifications_log').select('*').eq('recipient_id', uid).order('created_at', { ascending: false }).limit(50)
   ]);
-  for (const r of [profs, cats, btsRows, trs, reps, exps, rcpts]) {
+  for (const r of [profs, cats, btsRows, trs, reps, exps, rcpts, apprs, notifs]) {
     if (r.error) throw r.error;
   }
 
@@ -92,6 +109,8 @@ export async function hydrate() {
   data.transfers = (trs.data || []).map(mapTransfer);
   data.reports = (reps.data || []).map(mapReport);
   data.expenses = (exps.data || []).map(mapExpense);
+  data.approvalRequests = (apprs.data || []).map(mapApprovalRequest);
+  data.myNotifications = (notifs.data || []).map(mapNotification);
 
   const byExpense = {};
   (rcpts.data || []).forEach((r) => { (byExpense[r.expense_id] = byExpense[r.expense_id] || []).push({ id: r.id, path: r.storage_path }); });
@@ -131,6 +150,17 @@ function subscribeRealtime() {
       .subscribe(),
     supabase.channel('bts-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bts' }, (p) => { patchArray(data.bts, mapBt, p); notify(); })
+      .subscribe(),
+    supabase.channel('approval-requests-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'approval_requests' }, (p) => { patchArray(data.approvalRequests, mapApprovalRequest, p); notify(); })
+      .subscribe(),
+    // Notificaciones: revisora/admin ven todas por RLS, pero el panel
+    // personal solo debe mostrar las propias, asi que se filtra aca.
+    supabase.channel('notifications-log-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications_log' }, (p) => {
+        const row = p.new || p.old;
+        if (row && row.recipient_id === currentUserId) { patchArray(data.myNotifications, mapNotification, p); notify(); }
+      })
       .subscribe()
   );
 }
@@ -292,6 +322,43 @@ export async function reviewExpense(expenseId, { status, approvedAmount = null, 
 export async function addComment(targetType, targetId, body) {
   const { error } = await supabase.from('comments').insert({ target_type: targetType, target_id: targetId, author_id: currentUserId, body });
   if (error) throw error;
+}
+
+// ===== Aprobacion delegada: la revisora envia un gasto a que otra cuenta =====
+// (cualquier rol) de el visto bueno final, en vez de aprobarlo ella misma.
+export const getApprovalRequests = () => data.approvalRequests.slice();
+export const getPendingApprovalsForMe = () =>
+  data.approvalRequests.filter((r) => r.requestedTo === currentUserId && r.status === 'pending');
+export const getMyNotifications = () => data.myNotifications.slice().sort((a, b) => b.createdAt - a.createdAt);
+
+export async function sendApprovalRequest(expenseId, toUserId, note = '') {
+  const { data: row, error } = await supabase.from('approval_requests').insert({
+    expense_id: expenseId, requested_by: currentUserId, requested_to: toUserId, note: note || null
+  }).select().single();
+  if (error) throw error;
+  const { error: expErr } = await supabase.from('expenses').update({ review_status: 'sent_for_approval' }).eq('id', expenseId);
+  if (expErr) throw expErr;
+  return row.id;
+}
+
+// Resuelve una solicitud de aprobacion delegada: aprueba (con o sin ajuste
+// de monto) o rechaza, y deja el gasto en el mismo estado final que si la
+// revisora original lo hubiera resuelto directo.
+export async function resolveApprovalRequest(requestId, { approve, approvedAmount = null, resolutionNote = '' }) {
+  const { data: reqRow, error: reqErr } = await supabase.from('approval_requests').select('*').eq('id', requestId).single();
+  if (reqErr) throw reqErr;
+  const newStatus = approve ? (approvedAmount != null ? 'adjusted' : 'approved') : 'objected';
+  const { error: expErr } = await supabase.from('expenses').update({
+    review_status: newStatus, approved_amount: approvedAmount, reviewer_id: currentUserId,
+    reviewer_comment: resolutionNote || null, reviewed_at: new Date().toISOString()
+  }).eq('id', reqRow.expense_id);
+  if (expErr) throw expErr;
+  const { error: rErr } = await supabase.from('approval_requests').update({
+    status: approve ? 'approved' : 'rejected', resolution_note: resolutionNote || null, resolved_at: new Date().toISOString()
+  }).eq('id', requestId);
+  if (rErr) throw rErr;
+  if (resolutionNote) await addComment('expense', reqRow.expense_id, resolutionNote);
+  return mapApprovalRequest({ ...reqRow, status: approve ? 'approved' : 'rejected' });
 }
 
 // Historial de notificaciones enviadas (revisora/admin). Se consulta al

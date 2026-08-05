@@ -11,7 +11,7 @@ import { navigate } from './router.js';
 import {
   openExpenseForm, openReportForm, openAssignExpenses,
   openProfileForm, openBTForm, openTransferForm, openReviewForm, sendManualReminder,
-  openBroadcastForm, openImportBackupForm
+  openBroadcastForm, openImportBackupForm, openResolveApprovalForm
 } from './forms.js';
 import { LOGO_DATAURL } from './assets.js';
 import { newDoc, shareFiles, pdfFile } from './pdf.js';
@@ -32,7 +32,7 @@ async function hydrateThumbs(root) {
 }
 
 const REVIEW_BADGE = {
-  approved: '✅', adjusted: '✏️', objected: '❌', clarification_requested: '❓'
+  approved: '✅', adjusted: '✏️', objected: '❌', clarification_requested: '❓', sent_for_approval: '📤'
 };
 
 // fila de gasto reutilizable
@@ -261,7 +261,10 @@ export function openExpenseDetail(id) {
   }});
 }
 function reviewStatusLabel(status) {
-  return { approved: 'Aprobado', adjusted: 'Ajustado', objected: 'Objetado', clarification_requested: 'Aclaracion solicitada' }[status] || '';
+  return {
+    approved: 'Aprobado', adjusted: 'Ajustado', objected: 'Objetado',
+    clarification_requested: 'Aclaracion solicitada', sent_for_approval: 'Enviado a aprobacion'
+  }[status] || '';
 }
 
 // ============ LISTA DE RENDICIONES ============
@@ -713,7 +716,8 @@ export function renderTeamMetrics() {
 // ============ NOTIFICACIONES (revisora / admin) ============
 const NOTIF_TYPE_LABEL = {
   manual_reminder: 'Recordatorio', closure_reminder: 'Cierre de rendicion', objected: 'Objecion',
-  approved: 'Aprobacion', adjusted: 'Ajuste', clarification_requested: 'Aclaracion', broadcast: 'Aviso general', manual: 'Manual'
+  approved: 'Aprobacion', adjusted: 'Ajuste', clarification_requested: 'Aclaracion', broadcast: 'Aviso general',
+  manual: 'Manual', approval_request: 'Solicitud de aprobacion'
 };
 export function renderNotificationsHub() {
   const workers = controllableProfiles();
@@ -752,6 +756,50 @@ export function renderNotificationsHub() {
   }};
 }
 
+// ============ MIS NOTIFICACIONES (panel personal, cualquier rol) ============
+// A diferencia del hub de arriba (que es para revisora/admin ENVIAR avisos),
+// esta pantalla es el buzon personal de cada cuenta: lo que le mandaron a
+// ella. Las solicitudes de aprobacion pendientes se quedan arriba, visibles,
+// hasta que la persona realmente actua (aprobar/rechazar) - no desaparecen solas.
+export function renderMyNotifications() {
+  const pending = store.getPendingApprovalsForMe();
+  const notifs = store.getMyNotifications();
+
+  const pendingRows = pending.map((r) => {
+    const e = store.getExpense(r.expenseId);
+    const requester = store.getProfileById(r.requestedBy);
+    if (!e) return '';
+    return `<div class="card tight" style="margin-bottom:8px;border:1px solid var(--warning)">
+      <div class="row between"><b>📤 Solicitud de aprobacion</b><span class="muted tiny">${formatDate(new Date(r.createdAt).toISOString().slice(0, 10))}</span></div>
+      <div class="muted tiny" style="margin-top:4px">De ${esc(requester?.fullName || requester?.rut || '')} - ${esc(e.merchant || '')} - ${formatMoney(e.amount, e.currency)}</div>
+      ${r.note ? `<div class="tiny" style="margin-top:4px">"${esc(r.note)}"</div>` : ''}
+      <button class="btn primary sm" data-resolve="${r.id}" style="margin-top:8px">Revisar</button>
+    </div>`;
+  }).join('');
+
+  const notifRows = notifs.map((n) => `
+    <div class="card tight" style="margin-bottom:8px">
+      <div class="row between"><b>${esc(n.title)}</b><span class="muted tiny">${formatDate(new Date(n.createdAt).toISOString().slice(0, 10))}</span></div>
+      <div class="muted tiny">${NOTIF_TYPE_LABEL[n.type] || n.type}</div>
+      ${n.body ? `<div class="tiny" style="margin-top:4px">${esc(n.body)}</div>` : ''}
+    </div>`).join('');
+
+  const html = `
+    ${pending.length ? `
+      <div class="section-title">Requieren tu accion (${pending.length})</div>
+      <div style="margin-bottom:18px">${pendingRows}</div>
+    ` : ''}
+    <div class="section-title">Notificaciones</div>
+    ${notifs.length ? notifRows : emptyInline('🔔', 'Sin notificaciones', 'Apareceran aqui los avisos y recordatorios que te manden')}
+  `;
+  return { html, mount: (root) => {
+    root.querySelectorAll('[data-resolve]').forEach((b) => b.onclick = () => {
+      const req = pending.find((r) => r.id === b.dataset.resolve);
+      if (req) openResolveApprovalForm(req);
+    });
+  }};
+}
+
 // ============ AJUSTES ============
 export function renderSettings() {
   const p = store.getProfile();
@@ -764,6 +812,15 @@ export function renderSettings() {
         <div class="muted tiny">${esc(p?.rut || '')} - ${roleLabelText(role)}</div>
       </div>
       <button class="btn sm outline" data-act="profile">Editar</button>
+    </div>
+
+    <div class="section-title">Notificaciones</div>
+    <div class="settings-list">
+      <button class="si" data-act="inbox">
+        <span class="ic">🔔</span><span class="lbl">Mis notificaciones</span>
+        ${store.getPendingApprovalsForMe().length ? `<span class="val" style="color:var(--danger)">${store.getPendingApprovalsForMe().length}</span>` : ''}
+        <span class="chev"></span>
+      </button>
     </div>
 
     ${role === 'reviewer' || role === 'admin' ? `
@@ -803,6 +860,7 @@ export function renderSettings() {
   `;
   return { html, mount: async (root) => {
     root.querySelector('[data-act="profile"]').onclick = () => openProfileForm();
+    root.querySelector('[data-act="inbox"]').onclick = () => navigate('inbox');
     root.querySelector('[data-act="bts"]').onclick = () => navigate('bts');
     root.querySelector('[data-act="panel"]')?.addEventListener('click', () => navigate('panel'));
     root.querySelector('[data-act="admin"]')?.addEventListener('click', () => navigate('admin'));

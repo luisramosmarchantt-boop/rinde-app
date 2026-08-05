@@ -2,7 +2,7 @@
 import * as store from './store.js';
 import * as storage from './storage.js';
 import { compressImage } from './imageUtils.js';
-import { openSheet, confirmDialog } from './ui.js';
+import { openSheet, confirmDialog, actionSheet } from './ui.js';
 import { esc, todayISO, CURRENCIES, toast, formatMoney, monthKey } from './utils.js';
 import { navigate } from './router.js';
 import { readReceipt } from './ocr.js';
@@ -459,11 +459,28 @@ export function openReviewForm(expenseId) {
       <button class="btn danger" data-act="objected">❌ Objetar</button>
       <button class="btn outline" data-act="clarification_requested">❓ Pedir aclaracion</button>
     </div>
+    <button class="btn outline" data-act="send_for_approval" style="width:100%;margin-top:10px">📤 Enviar a aprobacion de otra persona</button>
   `;
   openSheet(html, { onMount: (root, close) => {
     root.querySelector('[data-close]').onclick = () => close();
     root.querySelectorAll('[data-act]').forEach((btn) => btn.onclick = async () => {
       const status = btn.dataset.act;
+
+      if (status === 'send_for_approval') {
+        const candidates = store.getAllProfiles().filter((p) => p.id !== store.myUserId());
+        const idx = await actionSheet('Enviar a aprobacion de...', candidates.map((p) => ({ label: p.fullName || p.rut })));
+        if (idx == null) return;
+        const target = candidates[idx];
+        const note = root.querySelector('#comment').value.trim();
+        try {
+          await store.sendApprovalRequest(expenseId, target.id, note);
+          await sendApprovalRequestPush(target.id, e, note);
+          toast('Enviado a aprobacion de ' + (target.fullName || target.rut), 'ok');
+          close();
+        } catch (err) { toast('No se pudo enviar: ' + (err.message || err), 'err'); }
+        return;
+      }
+
       if (status === 'adjusted') {
         root.querySelector('#adjustField').style.display = '';
         const val = root.querySelector('#approvedAmount').value.trim();
@@ -480,6 +497,79 @@ export function openReviewForm(expenseId) {
       } catch (err) { toast('No se pudo guardar: ' + (err.message || err), 'err'); }
     });
   }});
+}
+
+async function sendApprovalRequestPush(toUserId, expense, note) {
+  try {
+    const { sendPush } = await import('./push.js');
+    await sendPush({
+      recipientId: toUserId, title: 'Solicitud de aprobacion',
+      body: `Te piden aprobar un gasto de ${formatMoney(expense.amount, expense.currency)} (${expense.merchant || ''}).${note ? ' ' + note : ''}`,
+      type: 'approval_request'
+    });
+  } catch (e) { /* se puede revisar igual desde el panel de notificaciones */ }
+}
+
+// ---------- Resolver una solicitud de aprobacion delegada (desde el panel de notificaciones) ----------
+export function openResolveApprovalForm(request) {
+  const e = store.getExpense(request.expenseId);
+  if (!e) return;
+  const requester = store.getProfileById(request.requestedBy);
+  const owner = store.getProfileById(e.ownerId);
+  const html = `
+    <div class="sheet-head"><h2>Aprobar gasto</h2><button class="x" data-close>x</button></div>
+    <div class="card tight" style="margin-bottom:14px">
+      <div class="row between"><span class="muted">Monto original</span><b class="mono">${formatMoney(e.amount, e.currency)}</b></div>
+      <div class="muted tiny" style="margin-top:4px">${esc(e.merchant || '')} - ${e.date}</div>
+      <div class="muted tiny" style="margin-top:4px">Trabajador: ${esc(owner?.fullName || owner?.rut || '')}</div>
+      <div class="muted tiny" style="margin-top:4px">Pedido por: ${esc(requester?.fullName || requester?.rut || '')}</div>
+      ${request.note ? `<div class="muted tiny" style="margin-top:4px">"${esc(request.note)}"</div>` : ''}
+    </div>
+    <div class="field" id="adjustField" style="display:none">
+      <label>Monto aprobado (ajustado)</label>
+      <input class="input" id="approvedAmount" inputmode="numeric" placeholder="0" />
+    </div>
+    <div class="field">
+      <label>Comentario (opcional)</label>
+      <textarea class="textarea" id="comment" placeholder="Ej: todo en orden..."></textarea>
+    </div>
+    <div class="btn-row" style="flex-wrap:wrap;gap:8px">
+      <button class="btn success" data-act="approve">✅ Aprobar</button>
+      <button class="btn outline" data-act="adjust">✏️ Aprobar con ajuste</button>
+      <button class="btn danger" data-act="reject">❌ Rechazar</button>
+    </div>
+  `;
+  openSheet(html, { onMount: (root, close) => {
+    root.querySelector('[data-close]').onclick = () => close();
+    root.querySelectorAll('[data-act]').forEach((btn) => btn.onclick = async () => {
+      const act = btn.dataset.act;
+      if (act === 'adjust' && root.querySelector('#adjustField').style.display === 'none') {
+        root.querySelector('#adjustField').style.display = '';
+        return;
+      }
+      const resolutionNote = root.querySelector('#comment').value.trim();
+      const approve = act !== 'reject';
+      const approvedAmount = act === 'adjust' ? (parseFloat(root.querySelector('#approvedAmount').value) || 0) : null;
+      if (act === 'adjust' && !root.querySelector('#approvedAmount').value.trim()) { toast('Ingresa el monto aprobado', 'err'); return; }
+      try {
+        await store.resolveApprovalRequest(request.id, { approve, approvedAmount, resolutionNote });
+        await notifyWorkerOfReview(e, approve ? (approvedAmount != null ? 'adjusted' : 'approved') : 'objected', resolutionNote);
+        await notifyRequesterOfResolution(request, approve, resolutionNote);
+        toast(approve ? 'Gasto aprobado' : 'Gasto rechazado', 'ok');
+        close();
+      } catch (err) { toast('No se pudo guardar: ' + (err.message || err), 'err'); }
+    });
+  }});
+}
+
+async function notifyRequesterOfResolution(request, approve, note) {
+  const e = store.getExpense(request.expenseId);
+  const title = approve ? 'Aprobacion resuelta' : 'Solicitud rechazada';
+  const body = `${e?.merchant || 'El gasto'} que enviaste a aprobacion fue ${approve ? 'aprobado' : 'rechazado'}.${note ? ' ' + note : ''}`;
+  try {
+    const { sendPush } = await import('./push.js');
+    await sendPush({ recipientId: request.requestedBy, title, body, type: 'manual' });
+  } catch (err) { /* se puede ver igual en el panel de notificaciones */ }
 }
 
 async function notifyWorkerOfReview(expense, status, comment) {

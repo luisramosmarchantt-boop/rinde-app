@@ -6,7 +6,7 @@ import {
   renderDashboard, renderExpenses, renderReports, renderReportDetail,
   renderStats, renderSettings, renderBTs,
   renderReviewerPanel, renderReviewerWorkerDetail, renderReviewerExpenseDetail, renderReviewerReportDetail,
-  renderAdminPanel, renderTeamMetrics, renderNotificationsHub
+  renderAdminPanel, renderTeamMetrics, renderNotificationsHub, renderMyNotifications
 } from './views.js';
 import { openExpenseForm } from './forms.js';
 import { esc } from './utils.js';
@@ -29,7 +29,8 @@ const SCREENS = {
   panelReport:  { title: 'Rendicion', render: (id) => renderReviewerReportDetail(id), nav: 'panel', back: 'panel' },
   admin:        { title: 'Administracion', render: renderAdminPanel, nav: 'panel', back: 'panel' },
   metrics:       { title: 'Metricas', sub: 'Todo el equipo', render: renderTeamMetrics, nav: 'metrics' },
-  notifications: { title: 'Notificaciones', sub: 'Avisar a los trabajadores', render: renderNotificationsHub, nav: 'notifications' }
+  notifications: { title: 'Notificaciones', sub: 'Avisar a los trabajadores', render: renderNotificationsHub, nav: 'notifications' },
+  inbox:         { title: 'Mis notificaciones', render: renderMyNotifications, nav: 'settings', back: 'settings' }
 };
 
 function navFor(role) {
