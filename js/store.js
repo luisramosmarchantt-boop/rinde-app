@@ -29,7 +29,10 @@ function notify() { subs.forEach((fn) => fn()); }
 
 // ===== Mapeo DB (snake_case) <-> JS (camelCase) =====
 function mapProfile(row) {
-  return { id: row.id, rut: row.rut, fullName: row.full_name, company: row.company, role: row.role, cargo: row.cargo, createdAt: new Date(row.created_at).getTime() };
+  return {
+    id: row.id, rut: row.rut, fullName: row.full_name, company: row.company, role: row.role, cargo: row.cargo,
+    mustChangePassword: row.must_change_password, createdAt: new Date(row.created_at).getTime()
+  };
 }
 function mapBt(row) {
   return { id: row.id, code: row.code, name: row.name, createdBy: row.created_by, createdAt: new Date(row.created_at).getTime() };
@@ -481,6 +484,30 @@ export async function setRole(userId, role) {
   if (error) throw error;
   const p = getProfileById(userId);
   if (p) p.role = role;
+  notify();
+}
+
+// Revisora/admin: resetea la contraseña de otra cuenta a "1234" y la marca
+// para que deba cambiarla al entrar. La logica real vive en la funcion SQL
+// reset_user_password (necesita escribir auth.users, fuera del alcance de RLS).
+export async function resetWorkerPassword(userId) {
+  const { error } = await supabase.rpc('reset_user_password', { target_user_id: userId });
+  if (error) throw error;
+  const p = getProfileById(userId);
+  if (p) p.mustChangePassword = true;
+  notify();
+}
+
+// La propia cuenta define su nueva contraseña (tras un reset, o cuando
+// quiera) y se le levanta la marca de cambio obligatorio.
+export async function completePasswordChange(newPassword) {
+  const { error: pwErr } = await supabase.auth.updateUser({ password: newPassword });
+  if (pwErr) throw pwErr;
+  const { error } = await supabase.from('profiles').update({ must_change_password: false }).eq('id', currentUserId);
+  if (error) throw error;
+  if (data.profile) data.profile.mustChangePassword = false;
+  const p = getProfileById(currentUserId);
+  if (p) p.mustChangePassword = false;
   notify();
 }
 

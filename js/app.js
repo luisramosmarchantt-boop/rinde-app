@@ -193,6 +193,10 @@ export async function boot() {
     return;
   }
 
+  if (store.getProfile()?.mustChangePassword) {
+    await forcePasswordChange();
+  }
+
   if (!booted) {
     booted = true;
     registerServiceWorker();
@@ -203,6 +207,48 @@ export async function boot() {
   } else if (currentRoute) {
     renderShell(currentRoute);
   }
+}
+
+// Pantalla obligatoria (sin boton para saltarla) cuando la cuenta tiene una
+// contraseña recien reseteada por la revisora/admin ("1234"). No deja pasar
+// al resto de la app hasta que defina una propia.
+async function forcePasswordChange() {
+  await new Promise((resolve) => {
+    function paint(error) {
+      appEl.innerHTML = `
+        <div class="auth-screen" style="padding:32px 20px;max-width:420px;margin:0 auto">
+          <div style="font-size:48px;margin-bottom:12px;text-align:center">🔑</div>
+          <h1 style="margin-bottom:8px;text-align:center">Crea tu nueva contraseña</h1>
+          <p class="muted" style="margin-bottom:20px;text-align:center">Tu contraseña fue reseteada. Antes de seguir, define una nueva (minimo 6 caracteres).</p>
+          ${error ? `<div class="card" style="border:1px solid #d33;color:#d33;margin-bottom:14px">${esc(error)}</div>` : ''}
+          <form id="pwForm">
+            <div class="field">
+              <label>Nueva contraseña</label>
+              <input class="input" id="newPass" type="password" minlength="6" required autocomplete="new-password" />
+            </div>
+            <div class="field">
+              <label>Repite la contraseña</label>
+              <input class="input" id="newPass2" type="password" minlength="6" required autocomplete="new-password" />
+            </div>
+            <button class="btn primary" type="submit" style="width:100%;margin-top:8px">Guardar y continuar</button>
+          </form>
+        </div>`;
+      appEl.querySelector('#pwForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const p1 = appEl.querySelector('#newPass').value;
+        const p2 = appEl.querySelector('#newPass2').value;
+        if (p1.length < 6) { paint('La contraseña debe tener al menos 6 caracteres.'); return; }
+        if (p1 !== p2) { paint('Las contraseñas no coinciden.'); return; }
+        try {
+          await store.completePasswordChange(p1);
+          resolve();
+        } catch (err) {
+          paint(translateAuthError(err));
+        }
+      };
+    }
+    paint();
+  });
 }
 
 // Pantalla previa al shell, apenas se entra, pidiendo activar notificaciones

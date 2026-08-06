@@ -1000,7 +1000,9 @@ export function renderReviewerWorkerDetail(workerId) {
       <button class="btn outline" data-act="edit">Editar datos</button>
       <button class="btn outline" data-act="fund">+ Fondo</button>
       <button class="btn primary" data-act="remind">Notificar</button>
+      <button class="btn outline" data-act="reset-pass">🔑 Resetear contraseña</button>
     </div>
+    ${w.mustChangePassword ? `<p class="muted tiny" style="margin:-8px 2px 14px">⚠️ Contraseña reseteada, aun no la cambia</p>` : ''}
 
     <div class="section-title" style="margin-top:18px">Rendiciones (${reports.length})</div>
     <div class="list">${reports.length ? reportRows : emptyInline('', 'Sin rendiciones', 'Aun no crea ninguna')}</div>
@@ -1015,6 +1017,16 @@ export function renderReviewerWorkerDetail(workerId) {
     root.querySelector('[data-act="edit"]').onclick = () => openProfileForm(workerId);
     root.querySelector('[data-act="fund"]').onclick = () => openTransferForm(null, workerId);
     root.querySelector('[data-act="remind"]').onclick = () => sendManualReminder(workerId, 'manual_reminder');
+    root.querySelector('[data-act="reset-pass"]').onclick = async () => {
+      const ok = await confirmDialog({
+        title: 'Resetear contraseña',
+        message: `La contraseña de ${w.fullName || w.rut} quedara en "1234". Se le pedira cambiarla apenas entre.`,
+        confirmText: 'Resetear'
+      });
+      if (!ok) return;
+      try { await store.resetWorkerPassword(workerId); toast('Contraseña reseteada a 1234', 'ok'); navigate('panelWorker/' + workerId); }
+      catch (e) { toast('No se pudo resetear: ' + (e.message || e), 'err'); }
+    };
     root.querySelectorAll('[data-open-report]').forEach((b) => b.onclick = () => navigate('panelReport/' + b.dataset.openReport));
     root.querySelectorAll('[data-action="expense"]').forEach((el) =>
       el.addEventListener('click', () => navigate('panelExpense/' + el.dataset.id)));
