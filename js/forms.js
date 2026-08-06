@@ -184,7 +184,7 @@ export function openExpenseForm(expenseId = null, presetReportId = null) {
         btn.disabled = false;
         const ok = await confirmDialog({
           title: 'Posible duplicado',
-          message: `Ya existe un gasto de ${formatMoney(dup.amount, 'CLP')} del ${dup.date} (${dup.merchant || 'sin comercio'}). Podria ser tuyo o de otro trabajador. Guardar de todas formas?`,
+          message: `Ya existe un gasto de ${formatMoney(dup.amount, 'CLP')} del ${dup.date} (${dup.merchant || 'sin comercio'}). Podria ser tuyo o de otro colaborador. Guardar de todas formas?`,
           confirmText: 'Guardar igual'
         });
         if (!ok) return;
@@ -336,7 +336,7 @@ export function openProfileForm(userId = null) {
     cargos.map((c) => `<option value="${c.id}" ${p?.cargoId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`)
   ).join('');
   const html = `
-    <div class="sheet-head"><h2>${editingOther ? 'Editar trabajador' : 'Mi perfil'}</h2><button class="x" data-close>x</button></div>
+    <div class="sheet-head"><h2>${editingOther ? 'Editar colaborador' : 'Mi perfil'}</h2><button class="x" data-close>x</button></div>
     <div class="field"><label>Nombre</label><input class="input" id="name" value="${esc(p?.fullName || '')}"/></div>
     <div class="field"><label>RUT</label><input class="input" value="${esc(p?.rut || '')}" disabled/></div>
     <div class="field"><label>Rol</label><input class="input" value="${roleLabel(p?.role)}" disabled/></div>
@@ -360,7 +360,7 @@ export function openProfileForm(userId = null) {
   }});
 }
 function roleLabel(role) {
-  return role === 'admin' ? 'Administrador' : role === 'reviewer' ? 'Revisora' : 'Trabajador';
+  return role === 'reviewer' ? 'Revisora' : 'Colaborador';
 }
 
 // ---------- Formulario de BT / Proyecto (solo admin) ----------
@@ -473,7 +473,7 @@ export function openReviewForm(expenseId) {
       <input class="input" id="approvedAmount" inputmode="numeric" placeholder="0" value="${e.approvedAmount ?? ''}" />
     </div>
     <div class="field">
-      <label>Comentario (se lo notificamos al trabajador)</label>
+      <label>Comentario (se lo notificamos al colaborador)</label>
       <textarea class="textarea" id="comment" placeholder="Ej: falta el detalle de la boleta...">${esc(e.reviewerComment || '')}</textarea>
     </div>
     <div class="btn-row" style="flex-wrap:wrap;gap:8px">
@@ -544,7 +544,7 @@ export function openResolveApprovalForm(request) {
     <div class="card tight" style="margin-bottom:14px">
       <div class="row between"><span class="muted">Monto original</span><b class="mono">${formatMoney(e.amount, e.currency)}</b></div>
       <div class="muted tiny" style="margin-top:4px">${esc(e.merchant || '')} - ${e.date}</div>
-      <div class="muted tiny" style="margin-top:4px">Trabajador: ${esc(owner?.fullName || owner?.rut || '')}</div>
+      <div class="muted tiny" style="margin-top:4px">Colaborador: ${esc(owner?.fullName || owner?.rut || '')}</div>
       <div class="muted tiny" style="margin-top:4px">Pedido por: ${esc(requester?.fullName || requester?.rut || '')}</div>
       ${request.note ? `<div class="muted tiny" style="margin-top:4px">"${esc(request.note)}"</div>` : ''}
     </div>
@@ -622,14 +622,14 @@ export function openBroadcastForm() {
       <span class="nm">${esc(w.fullName || w.rut)}</span>
     </label>`).join('');
   const html = `
-    <div class="sheet-head"><h2>Notificar trabajadores</h2><button class="x" data-close>x</button></div>
+    <div class="sheet-head"><h2>Notificar colaboradores</h2><button class="x" data-close>x</button></div>
     <div class="field"><label>Titulo</label><input class="input" id="btitle" placeholder="Ej: Cierre de mes" /></div>
     <div class="field"><label>Mensaje</label><textarea class="textarea" id="bbody" placeholder="Detalle del aviso"></textarea></div>
     <div class="row between" style="margin:10px 2px 4px">
       <label>Destinatarios</label>
       <button type="button" class="mini-link" data-toggle-all>Marcar/desmarcar todos</button>
     </div>
-    <div style="max-height:40vh;overflow:auto">${rows || '<p class="muted center">Sin trabajadores</p>'}</div>
+    <div style="max-height:40vh;overflow:auto">${rows || '<p class="muted center">Sin colaboradores</p>'}</div>
     <button class="btn primary" data-save style="margin-top:14px">Enviar</button>
   `;
   openSheet(html, { full: true, onMount: (root, close) => {
@@ -644,13 +644,13 @@ export function openBroadcastForm() {
       const body = root.querySelector('#bbody').value.trim();
       const recipientIds = Array.from(root.querySelectorAll('[data-wid]:checked')).map((c) => c.dataset.wid);
       if (!title) { toast('Ingresa un titulo', 'err'); return; }
-      if (!recipientIds.length) { toast('Elige al menos un trabajador', 'err'); return; }
+      if (!recipientIds.length) { toast('Elige al menos un colaborador', 'err'); return; }
       const btn = root.querySelector('[data-save]'); btn.disabled = true;
       try {
         const { sendPush } = await import('./push.js');
         const res = await sendPush({ recipientIds, title, body, type: 'broadcast' });
         if (res.notified > 0) {
-          toast(`Enviado a ${res.notified} de ${res.workers || recipientIds.length} trabajador(es)`, 'ok');
+          toast(`Enviado a ${res.notified} de ${res.workers || recipientIds.length} colaborador(es)`, 'ok');
           close();
         } else {
           btn.disabled = false;
@@ -684,7 +684,7 @@ export function openNotifyWorkerForm(userId) {
         const { sendPush } = await import('./push.js');
         const res = await sendPush({ recipientId: userId, title, body, type: 'manual' });
         if (res.sent > 0) {
-          toast(`Enviado a ${worker?.fullName || 'el trabajador'}`, 'ok');
+          toast(`Enviado a ${worker?.fullName || 'el colaborador'}`, 'ok');
           close();
         } else {
           btn.disabled = false;

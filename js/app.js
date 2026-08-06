@@ -24,13 +24,13 @@ const SCREENS = {
   bts:       { title: 'BT / Proyectos', render: renderBTs, nav: 'settings', back: 'settings' },
   cargos:    { title: 'Cargos', render: renderCargos, nav: 'settings', back: 'settings' },
   report:    { title: 'Rendicion', render: (id) => renderReportDetail(id), nav: 'reports', back: 'reports' },
-  panel:        { title: 'Panel', sub: 'Revision por trabajador', render: renderReviewerPanel, nav: 'panel' },
-  panelWorker:  { title: 'Trabajador', render: (id) => renderReviewerWorkerDetail(id), nav: 'panel', back: 'panel' },
+  panel:        { title: 'Panel', sub: 'Revision por colaborador', render: renderReviewerPanel, nav: 'panel' },
+  panelWorker:  { title: 'Colaborador', render: (id) => renderReviewerWorkerDetail(id), nav: 'panel', back: 'panel' },
   panelExpense: { title: 'Gasto', render: (id) => renderReviewerExpenseDetail(id), nav: 'panel', back: 'panel' },
   panelReport:  { title: 'Rendicion', render: (id) => renderReviewerReportDetail(id), nav: 'panel', back: 'panel' },
   admin:        { title: 'Administracion', render: renderAdminPanel, nav: 'panel', back: 'panel' },
   metrics:       { title: 'Metricas', sub: 'Todo el equipo', render: renderTeamMetrics, nav: 'metrics' },
-  notifications: { title: 'Notificaciones', sub: 'Avisar a los trabajadores', render: renderNotificationsHub, nav: 'notifications' },
+  notifications: { title: 'Notificaciones', sub: 'Avisar a los colaboradores', render: renderNotificationsHub, nav: 'notifications' },
   inbox:         { title: 'Mis notificaciones', render: renderMyNotifications, nav: 'dashboard', back: 'dashboard' }
 };
 

@@ -689,7 +689,7 @@ export function renderTeamMetrics() {
     <div class="kpis" style="margin-bottom:6px">
       <div class="kpi"><div class="v mono">${formatMoney(total, cur())}</div><div class="k">Total equipo ${teamMetricsRange === 'month' ? 'del mes' : 'historico'}</div></div>
       <div class="kpi"><div class="v">${expenses.length}</div><div class="k">Gastos registrados</div></div>
-      <div class="kpi"><div class="v">${workers.length}</div><div class="k">Trabajadores</div></div>
+      <div class="kpi"><div class="v">${workers.length}</div><div class="k">Colaboradores</div></div>
       <div class="kpi"><div class="v">${totalPending}</div><div class="k">Pendientes de revisar</div></div>
     </div>
 
@@ -701,7 +701,7 @@ export function renderTeamMetrics() {
       ${catData.length ? donutChart(catData, cur()) : '<p class="muted center" style="padding:14px 0">Sin datos en este periodo</p>'}
     </div>
 
-    <div class="section-title">Ranking por trabajador</div>
+    <div class="section-title">Ranking por colaborador</div>
     <div class="list">
       ${ranking.length ? ranking.map((r) => `<button class="item" data-open-worker="${r.worker.id}">
         <span class="emoji">👤</span>
@@ -710,7 +710,7 @@ export function renderTeamMetrics() {
           <span class="s">${r.count} gasto(s)${r.pending ? ' - ' + r.pending + ' sin revisar' : ''}</span>
         </span>
         <span class="amt mono">${formatMoney(r.total, cur())}</span>
-      </button>`).join('') : emptyInline('', 'Sin trabajadores aun', '')}
+      </button>`).join('') : emptyInline('', 'Sin colaboradores aun', '')}
     </div>
   `;
   return { html, mount: (root) => {
@@ -737,7 +737,7 @@ export function renderNotificationsHub() {
     <button class="btn primary" data-action="broadcast" style="width:100%;margin-bottom:16px">📢 Enviar aviso general</button>
 
     <div class="section-title">Mensajes individuales</div>
-    ${workers.length ? workerRows : emptyInline('', 'Sin trabajadores aun', '')}
+    ${workers.length ? workerRows : emptyInline('', 'Sin colaboradores aun', '')}
 
     <div class="section-title" style="margin-top:18px">Historial reciente</div>
     <div id="notifLog"><p class="muted center">Cargando...</p></div>
@@ -753,7 +753,7 @@ export function renderNotificationsHub() {
       const recipient = store.getProfileById(n.recipientId);
       return `<div class="card tight" style="margin-bottom:8px">
         <div class="row between"><b>${esc(n.title)}</b><span class="muted tiny">${formatDate(new Date(n.createdAt).toISOString().slice(0, 10))}</span></div>
-        <div class="muted tiny">${esc(recipient?.fullName || recipient?.rut || 'Trabajador')} - ${NOTIF_TYPE_LABEL[n.type] || n.type}</div>
+        <div class="muted tiny">${esc(recipient?.fullName || recipient?.rut || 'Colaborador')} - ${NOTIF_TYPE_LABEL[n.type] || n.type}</div>
         ${n.body ? `<div class="tiny" style="margin-top:4px">${esc(n.body)}</div>` : ''}
       </div>`;
     }).join('');
@@ -897,7 +897,7 @@ export function renderSettings() {
     };
   }};
 }
-function roleLabelText(role) { return role === 'admin' ? 'Administrador' : role === 'reviewer' ? 'Revisora' : 'Trabajador'; }
+function roleLabelText(role) { return role === 'reviewer' ? 'Revisora' : 'Colaborador'; }
 
 // ============ BT / PROYECTOS ============
 export function renderBTs() {
@@ -931,7 +931,7 @@ export function renderCargos() {
   const canManage = store.isReviewerOrAdmin();
   const html = `
     ${canManage ? `<button class="btn primary" data-act="new" style="margin-bottom:14px">+ Nuevo cargo</button>` : ''}
-    <p class="muted tiny" style="margin:-6px 2px 12px">${canManage ? 'Crea y administra los cargos que se pueden asignar a un trabajador.' : 'Cargos disponibles en la empresa.'}</p>
+    <p class="muted tiny" style="margin:-6px 2px 12px">${canManage ? 'Crea y administra los cargos que se pueden asignar a un colaborador.' : 'Cargos disponibles en la empresa.'}</p>
     ${cargos.length ? cargos.map((c) => {
       const count = store.getAllProfiles().filter((p) => p.cargoId === c.id).length;
       return `<div class="manage-row">
@@ -980,8 +980,8 @@ export function renderReviewerPanel() {
   }).join('');
 
   const html = `
-    <div class="section-title" style="margin-bottom:4px">Trabajadores (${workers.length})</div>
-    <div class="list">${workers.length ? workerRows : emptyInline('', 'Sin trabajadores aun', 'Apareceran aqui cuando se registren')}</div>
+    <div class="section-title" style="margin-bottom:4px">Colaboradores (${workers.length})</div>
+    <div class="list">${workers.length ? workerRows : emptyInline('', 'Sin colaboradores aun', 'Apareceran aqui cuando se registren')}</div>
   `;
   return { html, mount: (root) => {
     root.querySelectorAll('[data-open-worker]').forEach((b) => b.onclick = () => navigate('panelWorker/' + b.dataset.openWorker));
@@ -993,7 +993,7 @@ export function renderReviewerPanel() {
 // gastos sueltos por revisar, y las acciones de edicion/notificacion/fondo.
 export function renderReviewerWorkerDetail(workerId) {
   const w = store.getProfileById(workerId);
-  if (!w) return { html: emptyInline('🤔', 'Trabajador no encontrado', ''), mount: () => {} };
+  if (!w) return { html: emptyInline('🤔', 'Colaborador no encontrado', ''), mount: () => {} };
   const t = store.totals(workerId);
   const reports = store.getReports(workerId);
   const loose = store.getUnassignedExpenses(workerId);
@@ -1166,7 +1166,7 @@ export function renderAdminPanel() {
       ${p.id !== store.myUserId() ? `<button data-edit="${p.id}">Editar</button>` : ''}
       ${p.id !== store.myUserId() ? `
         <select data-role="${p.id}" class="select" style="width:auto">
-          <option value="worker" ${p.role === 'worker' ? 'selected' : ''}>Trabajador</option>
+          <option value="worker" ${p.role === 'worker' ? 'selected' : ''}>Colaborador</option>
           <option value="reviewer" ${p.role === 'reviewer' ? 'selected' : ''}>Revisora</option>
           <option value="admin" ${p.role === 'admin' ? 'selected' : ''}>Admin</option>
         </select>` : '<span class="muted tiny">(tu)</span>'}
