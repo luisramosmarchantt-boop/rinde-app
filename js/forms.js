@@ -589,26 +589,6 @@ async function notifyWorkerOfReview(expense, status, comment) {
   } catch (e) { /* si no tiene suscripcion push, no pasa nada grave */ }
 }
 
-// ---------- Recordatorio manual (revisora/admin) ----------
-export async function sendManualReminder(ownerId, kind = 'manual_reminder') {
-  const worker = store.getProfileById(ownerId);
-  const title = kind === 'closure_reminder' ? 'Cierra tu rendicion' : 'Recuerda subir tus boletas';
-  const body = kind === 'closure_reminder'
-    ? 'La revisora te pide cerrar y enviar tu rendicion pendiente.'
-    : 'Llevas un tiempo sin registrar gastos. Sube tus boletas cuando puedas.';
-  try {
-    const { sendPush } = await import('./push.js');
-    const res = await sendPush({ recipientId: ownerId, title, body, type: kind });
-    if (res.sent > 0) {
-      toast(`Recordatorio enviado a ${worker?.fullName || 'el trabajador'}`, 'ok');
-    } else {
-      toast('No llego: ' + (res.errors?.[0] || 'sin suscripciones activas'), 'err');
-    }
-  } catch (e) {
-    toast('No se pudo enviar: ' + (e.message || e), 'err');
-  }
-}
-
 // ---------- Aviso a trabajadores elegidos, o a todos (revisora/admin) ----------
 export function openBroadcastForm() {
   const workers = store.getAllProfiles().filter((p) =>

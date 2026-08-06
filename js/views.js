@@ -10,7 +10,7 @@ import {
 import { navigate } from './router.js';
 import {
   openExpenseForm, openReportForm, openAssignExpenses,
-  openProfileForm, openBTForm, openTransferForm, openReviewForm, sendManualReminder,
+  openProfileForm, openBTForm, openTransferForm, openReviewForm,
   openBroadcastForm, openImportBackupForm, openResolveApprovalForm, openNotifyWorkerForm
 } from './forms.js';
 import { LOGO_DATAURL } from './assets.js';
@@ -730,14 +730,13 @@ export function renderNotificationsHub() {
   const workerRows = workers.map((w) => `
     <div class="manage-row">
       <span class="nm">${esc(w.fullName || w.rut)}</span>
-      <button data-remind="${w.id}">Recordar</button>
-      <button data-close-remind="${w.id}">Cierre</button>
+      <button data-notify="${w.id}">Enviar mensaje</button>
     </div>`).join('');
 
   const html = `
     <button class="btn primary" data-action="broadcast" style="width:100%;margin-bottom:16px">📢 Enviar aviso general</button>
 
-    <div class="section-title">Recordatorios individuales</div>
+    <div class="section-title">Mensajes individuales</div>
     ${workers.length ? workerRows : emptyInline('', 'Sin trabajadores aun', '')}
 
     <div class="section-title" style="margin-top:18px">Historial reciente</div>
@@ -745,8 +744,7 @@ export function renderNotificationsHub() {
   `;
   return { html, mount: async (root) => {
     root.querySelector('[data-action="broadcast"]').onclick = () => openBroadcastForm();
-    root.querySelectorAll('[data-remind]').forEach((b) => b.onclick = () => sendManualReminder(b.dataset.remind, 'manual_reminder'));
-    root.querySelectorAll('[data-close-remind]').forEach((b) => b.onclick = () => sendManualReminder(b.dataset.closeRemind, 'closure_reminder'));
+    root.querySelectorAll('[data-notify]').forEach((b) => b.onclick = () => openNotifyWorkerForm(b.dataset.notify));
 
     const log = await store.getRecentNotifications(30);
     const wrap = root.querySelector('#notifLog');
