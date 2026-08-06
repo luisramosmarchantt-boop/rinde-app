@@ -10,7 +10,7 @@ import {
 } from './views.js';
 import { openExpenseForm } from './forms.js';
 import { esc } from './utils.js';
-import { canInstall, promptInstall } from './installPrompt.js';
+import { canInstall, promptInstall, onInstallAvailable } from './installPrompt.js';
 
 const appEl = document.getElementById('app');
 
@@ -110,6 +110,8 @@ function renderLogin(initial = {}) {
   let error = initial.error || '';
   let busy = false;
 
+  onInstallAvailable(() => paint());
+
   function paint() {
     appEl.innerHTML = `
       <div class="auth-screen" style="padding:32px 20px;max-width:420px;margin:0 auto">
@@ -156,6 +158,7 @@ function renderLogin(initial = {}) {
         } else {
           await auth.signUp({ rut, fullName, password });
         }
+        onInstallAvailable(null);
         await boot();
       } catch (err) {
         busy = false;

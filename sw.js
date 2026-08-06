@@ -2,7 +2,7 @@
 // Cache de la "app shell" (los datos en si viven en Supabase, no aca).
 // Ademas maneja notificaciones Web Push.
 
-const CACHE = 'rindeapp-cloud-v5';
+const CACHE = 'rindeapp-cloud-v6';
 const RUNTIME = 'rindeapp-cloud-runtime-v1';
 // Unicos hosts externos que sirven archivos inmutables (versionados en la
 // URL). Cualquier otro origen externo (Supabase: datos, auth, storage) es
