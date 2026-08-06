@@ -210,7 +210,7 @@ export async function boot() {
 }
 
 // Pantalla obligatoria (sin boton para saltarla) cuando la cuenta tiene una
-// contraseña recien reseteada por la revisora/admin ("1234"). No deja pasar
+// contraseña recien reseteada por la revisora/admin ("123456"). No deja pasar
 // al resto de la app hasta que defina una propia.
 async function forcePasswordChange() {
   await new Promise((resolve) => {

@@ -1020,11 +1020,11 @@ export function renderReviewerWorkerDetail(workerId) {
     root.querySelector('[data-act="reset-pass"]').onclick = async () => {
       const ok = await confirmDialog({
         title: 'Resetear contraseña',
-        message: `La contraseña de ${w.fullName || w.rut} quedara en "1234". Se le pedira cambiarla apenas entre.`,
+        message: `La contraseña de ${w.fullName || w.rut} quedara en "123456". Se le pedira cambiarla apenas entre.`,
         confirmText: 'Resetear'
       });
       if (!ok) return;
-      try { await store.resetWorkerPassword(workerId); toast('Contraseña reseteada a 1234', 'ok'); navigate('panelWorker/' + workerId); }
+      try { await store.resetWorkerPassword(workerId); toast('Contraseña reseteada a 123456', 'ok'); navigate('panelWorker/' + workerId); }
       catch (e) { toast('No se pudo resetear: ' + (e.message || e), 'err'); }
     };
     root.querySelectorAll('[data-open-report]').forEach((b) => b.onclick = () => navigate('panelReport/' + b.dataset.openReport));

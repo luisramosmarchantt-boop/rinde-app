@@ -487,7 +487,7 @@ export async function setRole(userId, role) {
   notify();
 }
 
-// Revisora/admin: resetea la contraseña de otra cuenta a "1234" y la marca
+// Revisora/admin: resetea la contraseña de otra cuenta a "123456" y la marca
 // para que deba cambiarla al entrar. La logica real vive en la funcion SQL
 // reset_user_password (necesita escribir auth.users, fuera del alcance de RLS).
 export async function resetWorkerPassword(userId) {
