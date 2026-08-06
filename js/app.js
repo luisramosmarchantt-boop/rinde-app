@@ -16,7 +16,7 @@ const appEl = document.getElementById('app');
 
 // Config de cada pantalla
 const SCREENS = {
-  dashboard: { title: 'RindeApp Cloud', sub: 'Caja chica y rendiciones', render: renderDashboard, nav: 'dashboard' },
+  dashboard: { title: 'RendiMTQ', sub: 'Caja chica y rendiciones', render: renderDashboard, nav: 'dashboard' },
   expenses:  { title: 'Gastos', render: renderExpenses, nav: 'expenses' },
   reports:   { title: 'Rendiciones', render: renderReports, nav: 'reports' },
   stats:     { title: 'Estadisticas', render: renderStats, nav: 'stats' },
@@ -112,8 +112,9 @@ function renderLogin(initial = {}) {
   function paint() {
     appEl.innerHTML = `
       <div class="auth-screen" style="padding:32px 20px;max-width:420px;margin:0 auto">
-        <h1 style="margin-bottom:4px">RindeApp Cloud</h1>
-        <p class="muted" style="margin-bottom:20px">${mode === 'login' ? 'Ingresa con tu RUT' : 'Crea tu cuenta con tu RUT'}</p>
+        <img src="icons/icon-192.png" alt="RendiMTQ" style="width:76px;height:76px;display:block;margin:0 auto 14px" />
+        <h1 style="margin-bottom:4px;text-align:center">RendiMTQ</h1>
+        <p class="muted" style="margin-bottom:20px;text-align:center">${mode === 'login' ? 'Ingresa con tu RUT' : 'Crea tu cuenta con tu RUT'}</p>
         ${error ? `<div class="card" style="border:1px solid #d33;color:#d33;margin-bottom:14px">${esc(error)}</div>` : ''}
         <form id="authForm">
           <div class="field">

@@ -95,8 +95,8 @@ self.addEventListener('fetch', (event) => {
 // ===== Web Push =====
 self.addEventListener('push', (event) => {
   let payload = {};
-  try { payload = event.data ? event.data.json() : {}; } catch (e) { payload = { title: 'RindeApp Cloud', body: event.data ? event.data.text() : '' }; }
-  const title = payload.title || 'RindeApp Cloud';
+  try { payload = event.data ? event.data.json() : {}; } catch (e) { payload = { title: 'RendiMTQ', body: event.data ? event.data.text() : '' }; }
+  const title = payload.title || 'RendiMTQ';
   const options = {
     body: payload.body || '',
     icon: './icons/icon-192.png',

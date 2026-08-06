@@ -491,7 +491,7 @@ async function rendicionPdf(r) {
   });
 
   doc.setFontSize(7.5); doc.setTextColor(130, 130, 130);
-  doc.text(`${owner?.company || ''} - Generado por RindeApp Cloud - ${new Date().toLocaleString('es-CL')}`,
+  doc.text(`${owner?.company || ''} - Generado por RendiMTQ - ${new Date().toLocaleString('es-CL')}`,
     12, doc.internal.pageSize.getHeight() - 8);
 
   return doc.output('blob');

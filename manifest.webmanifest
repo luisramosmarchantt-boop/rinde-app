@@ -1,6 +1,6 @@
 {
-  "name": "RindeApp Cloud — Rendición de gastos en equipo",
-  "short_name": "RindeApp Cloud",
+  "name": "RendiMTQ — Rendición de gastos en equipo",
+  "short_name": "RendiMTQ",
   "description": "Registra gastos, adjunta boletas y sincroniza en vivo con el equipo revisor. Requiere conexión.",
   "start_url": "./index.html",
   "scope": "./",
