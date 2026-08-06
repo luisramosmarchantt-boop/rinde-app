@@ -10,7 +10,7 @@ import {
 import { navigate } from './router.js';
 import {
   openExpenseForm, openReportForm, openAssignExpenses,
-  openProfileForm, openBTForm, openTransferForm, openReviewForm,
+  openProfileForm, openBTForm, openCargoForm, openTransferForm, openReviewForm,
   openBroadcastForm, openImportBackupForm, openResolveApprovalForm, openNotifyWorkerForm
 } from './forms.js';
 import { LOGO_DATAURL } from './assets.js';
@@ -841,6 +841,10 @@ export function renderSettings() {
         <span class="ic">🏷️</span><span class="lbl">BT / Proyectos</span>
         <span class="val">${store.getBTs().length}</span><span class="chev"></span>
       </button>
+      <button class="si" data-act="cargos">
+        <span class="ic">🪪</span><span class="lbl">Cargos</span>
+        <span class="val">${store.getCargos().length}</span><span class="chev"></span>
+      </button>
       <button class="si" id="pushToggle" data-act="push">
         <span class="ic">🔔</span><span class="lbl">Notificaciones push</span>
         <span class="val" id="pushStatus">...</span><span class="chev"></span>
@@ -867,6 +871,7 @@ export function renderSettings() {
     root.querySelector('[data-act="profile"]').onclick = () => openProfileForm();
     root.querySelector('[data-act="inbox"]').onclick = () => navigate('inbox');
     root.querySelector('[data-act="bts"]').onclick = () => navigate('bts');
+    root.querySelector('[data-act="cargos"]').onclick = () => navigate('cargos');
     root.querySelector('[data-act="panel"]')?.addEventListener('click', () => navigate('panel'));
     root.querySelector('[data-act="admin"]')?.addEventListener('click', () => navigate('admin'));
     root.querySelector('[data-act="import-backup"]').onclick = () => openImportBackupForm();
@@ -920,6 +925,32 @@ export function renderBTs() {
   }};
 }
 
+// ============ CARGOS EN LA EMPRESA ============
+export function renderCargos() {
+  const cargos = store.getCargos();
+  const canManage = store.isReviewerOrAdmin();
+  const html = `
+    ${canManage ? `<button class="btn primary" data-act="new" style="margin-bottom:14px">+ Nuevo cargo</button>` : ''}
+    <p class="muted tiny" style="margin:-6px 2px 12px">${canManage ? 'Crea y administra los cargos que se pueden asignar a un trabajador.' : 'Cargos disponibles en la empresa.'}</p>
+    ${cargos.length ? cargos.map((c) => {
+      const count = store.getAllProfiles().filter((p) => p.cargoId === c.id).length;
+      return `<div class="manage-row">
+        <span class="nm">${esc(c.name)}<br><span class="muted tiny">${count} persona(s)</span></span>
+        ${canManage ? `<button data-edit="${c.id}">Editar</button><button class="del" data-del="${c.id}">Eliminar</button>` : ''}
+      </div>`;
+    }).join('') : emptyInline('', 'Sin cargos todavia', canManage ? 'Crea el primer cargo' : 'Aun no hay cargos creados')}
+  `;
+  return { html, mount: (root) => {
+    root.querySelector('[data-act="new"]')?.addEventListener('click', () => openCargoForm());
+    root.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openCargoForm(b.dataset.edit));
+    root.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+      const cargo = store.getCargo(b.dataset.del);
+      const ok = await confirmDialog({ title: 'Eliminar cargo', message: `Quienes tengan "${cargo?.name}" quedaran sin cargo asignado. Continuar?`, confirmText: 'Eliminar', danger: true });
+      if (ok) { await store.deleteCargo(b.dataset.del); toast('Cargo eliminado'); navigate('cargos'); }
+    });
+  }};
+}
+
 // Cuentas que la revisora/admin puede controlar como si fueran trabajadores:
 // los workers y tambien el admin (el es quien rinde sus propios gastos), pero
 // nunca uno mismo (para no aparecer en el propio Panel).
@@ -937,7 +968,7 @@ export function renderReviewerPanel() {
   const workerRows = workers.map((w) => {
     const t = store.totals(w.id);
     const pending = store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length;
-    const cargoPrefix = w.cargo ? esc(w.cargo) + ' - ' : '';
+    const cargoPrefix = w.cargoId ? esc(store.cargoLabel(w.cargoId)) + ' - ' : '';
     return `<button class="item" data-open-worker="${w.id}">
       <span class="emoji">👤</span>
       <span class="body">
@@ -982,7 +1013,7 @@ export function renderReviewerWorkerDetail(workerId) {
 
   const html = `
     <div class="card">
-      <div class="muted tiny">${esc(w.rut)}${w.cargo ? ' - ' + esc(w.cargo) : ''}</div>
+      <div class="muted tiny">${esc(w.rut)}${w.cargoId ? ' - ' + esc(store.cargoLabel(w.cargoId)) : ''}</div>
       <h2 style="margin:4px 0 10px;font-size:20px">${esc(w.fullName || w.rut)}</h2>
       <div class="balance-grid">
         <div><span>Recibido</span><b class="mono">${formatMoney(t.receivedTotal, cur())}</b></div>
@@ -1131,7 +1162,7 @@ export function renderAdminPanel() {
   const profiles = store.getAllProfiles();
   const rows = profiles.map((p) => `
     <div class="manage-row">
-      <span class="nm">${esc(p.fullName || p.rut)}<br><span class="muted tiny">${esc(p.rut)} - ${roleLabelText(p.role)}${p.cargo ? ' - ' + esc(p.cargo) : ''}</span></span>
+      <span class="nm">${esc(p.fullName || p.rut)}<br><span class="muted tiny">${esc(p.rut)} - ${roleLabelText(p.role)}${p.cargoId ? ' - ' + esc(store.cargoLabel(p.cargoId)) : ''}</span></span>
       ${p.id !== store.myUserId() ? `<button data-edit="${p.id}">Editar</button>` : ''}
       ${p.id !== store.myUserId() ? `
         <select data-role="${p.id}" class="select" style="width:auto">
@@ -1147,11 +1178,14 @@ export function renderAdminPanel() {
     <button class="btn outline" data-act="notifications" style="width:100%;margin-bottom:14px">🔔 Notificaciones</button>
     <div class="section-title">BT / Proyectos</div>
     <button class="btn outline" data-act="bts" style="width:100%;margin-bottom:14px">Gestionar BT / Proyectos</button>
+    <div class="section-title">Cargos</div>
+    <button class="btn outline" data-act="cargos" style="width:100%;margin-bottom:14px">Gestionar Cargos</button>
     <div class="section-title">Cuentas (${profiles.length})</div>
     ${rows}
   `;
   return { html, mount: (root) => {
     root.querySelector('[data-act="bts"]').onclick = () => navigate('bts');
+    root.querySelector('[data-act="cargos"]').onclick = () => navigate('cargos');
     root.querySelector('[data-act="metrics"]').onclick = () => navigate('metrics');
     root.querySelector('[data-act="notifications"]').onclick = () => navigate('notifications');
     root.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openProfileForm(b.dataset.edit));

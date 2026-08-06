@@ -12,6 +12,7 @@ let data = {
   profiles: [],
   categories: [],
   bts: [],
+  cargos: [],
   transfers: [],
   reports: [],
   expenses: [],
@@ -30,12 +31,15 @@ function notify() { subs.forEach((fn) => fn()); }
 // ===== Mapeo DB (snake_case) <-> JS (camelCase) =====
 function mapProfile(row) {
   return {
-    id: row.id, rut: row.rut, fullName: row.full_name, company: row.company, role: row.role, cargo: row.cargo,
+    id: row.id, rut: row.rut, fullName: row.full_name, company: row.company, role: row.role, cargoId: row.cargo_id,
     mustChangePassword: row.must_change_password, createdAt: new Date(row.created_at).getTime()
   };
 }
 function mapBt(row) {
   return { id: row.id, code: row.code, name: row.name, createdBy: row.created_by, createdAt: new Date(row.created_at).getTime() };
+}
+function mapCargo(row) {
+  return { id: row.id, name: row.name, createdBy: row.created_by, createdAt: new Date(row.created_at).getTime() };
 }
 function mapTransfer(row) {
   return { id: row.id, ownerId: row.owner_id, createdBy: row.created_by, amount: Number(row.amount), currency: row.currency, date: row.date, note: row.note, createdAt: new Date(row.created_at).getTime() };
@@ -90,10 +94,11 @@ export async function hydrate() {
   if (!uid) throw new Error('No hay sesion activa');
   currentUserId = uid;
 
-  const [profs, cats, btsRows, trs, reps, exps, rcpts, apprs, notifs] = await Promise.all([
+  const [profs, cats, btsRows, cargoRows, trs, reps, exps, rcpts, apprs, notifs] = await Promise.all([
     supabase.from('profiles').select('*'),
     supabase.from('categories').select('*').order('sort_order'),
     supabase.from('bts').select('*'),
+    supabase.from('cargos').select('*').order('name'),
     supabase.from('transfers').select('*'),
     supabase.from('reports').select('*'),
     supabase.from('expenses').select('*'),
@@ -101,7 +106,7 @@ export async function hydrate() {
     supabase.from('approval_requests').select('*'),
     supabase.from('notifications_log').select('*').eq('recipient_id', uid).order('created_at', { ascending: false }).limit(50)
   ]);
-  for (const r of [profs, cats, btsRows, trs, reps, exps, rcpts, apprs, notifs]) {
+  for (const r of [profs, cats, btsRows, cargoRows, trs, reps, exps, rcpts, apprs, notifs]) {
     if (r.error) throw r.error;
   }
 
@@ -110,6 +115,7 @@ export async function hydrate() {
   data.myRole = data.profile?.role || 'worker';
   data.categories = (cats.data || []).map((c) => ({ id: c.id, name: c.name, emoji: c.emoji, col: c.col }));
   data.bts = (btsRows.data || []).map(mapBt);
+  data.cargos = (cargoRows.data || []).map(mapCargo);
   data.transfers = (trs.data || []).map(mapTransfer);
   data.reports = (reps.data || []).map(mapReport);
   data.expenses = (exps.data || []).map(mapExpense);
@@ -155,6 +161,9 @@ function subscribeRealtime() {
     supabase.channel('bts-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bts' }, (p) => { patchArray(data.bts, mapBt, p); notify(); })
       .subscribe(),
+    supabase.channel('cargos-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cargos' }, (p) => { patchArray(data.cargos, mapCargo, p); notify(); })
+      .subscribe(),
     supabase.channel('approval-requests-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'approval_requests' }, (p) => { patchArray(data.approvalRequests, mapApprovalRequest, p); notify(); })
       .subscribe(),
@@ -189,6 +198,10 @@ export const getCategory = (id) => data.categories.find((c) => c.id === id) || {
 export const getBTs = () => data.bts.slice();
 export const getBT = (id) => data.bts.find((b) => b.id === id) || null;
 export const btLabel = (id) => { const b = getBT(id); if (!b) return ''; return b.code + (b.name ? '  ' + b.name : ''); };
+
+export const getCargos = () => data.cargos.slice();
+export const getCargo = (id) => data.cargos.find((c) => c.id === id) || null;
+export const cargoLabel = (id) => getCargo(id)?.name || '';
 
 const sortByDateDesc = (a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt;
 
@@ -455,25 +468,33 @@ export async function deleteBT(id) {
   if (error) throw error;
 }
 
-// ===== Perfil: nombre y cargo editables por el dueño (solo nombre) o por revisora/admin (ambos) =====
-export const CARGOS = [
-  'Gerente General', 'Representante Legal', 'Socio', 'Jefe de Administracion',
-  'Asistente Contable', 'Capataz', 'Ingeniero de Proyectos',
-  'Encargado de Prevencion de Riesgos', 'Encargado de Licitaciones',
-  'Maestro OOCC', 'Maestro Electrico'
-];
+// ===== Cargos en la empresa (revisora/admin los gestionan, RLS lo exige) =====
+export async function addCargo({ name }) {
+  const { data: row, error } = await supabase.from('cargos').insert({ name: (name || '').trim(), created_by: currentUserId }).select().single();
+  if (error) throw error;
+  return row.id;
+}
+export async function updateCargo(id, { name }) {
+  const { error } = await supabase.from('cargos').update({ name: (name || '').trim() }).eq('id', id);
+  if (error) throw error;
+}
+export async function deleteCargo(id) {
+  const { error } = await supabase.from('cargos').delete().eq('id', id);
+  if (error) throw error;
+}
 
-export async function updateProfileDetails(userId, { fullName, cargo }) {
+// ===== Perfil: nombre editable por el dueño; nombre y cargo por revisora/admin =====
+export async function updateProfileDetails(userId, { fullName, cargoId }) {
   const dbPatch = {};
   if (fullName !== undefined) dbPatch.full_name = fullName;
-  if (cargo !== undefined) dbPatch.cargo = cargo || null;
+  if (cargoId !== undefined) dbPatch.cargo_id = cargoId || null;
   const { error } = await supabase.from('profiles').update(dbPatch).eq('id', userId);
   if (error) throw error;
   const p = getProfileById(userId);
-  if (p) { if (fullName !== undefined) p.fullName = fullName; if (cargo !== undefined) p.cargo = cargo || null; }
+  if (p) { if (fullName !== undefined) p.fullName = fullName; if (cargoId !== undefined) p.cargoId = cargoId || null; }
   if (data.profile && data.profile.id === userId) {
     if (fullName !== undefined) data.profile.fullName = fullName;
-    if (cargo !== undefined) data.profile.cargo = cargo || null;
+    if (cargoId !== undefined) data.profile.cargoId = cargoId || null;
   }
   notify();
 }

@@ -4,7 +4,7 @@ import * as auth from './auth.js';
 import { startRouter, onRoute, navigate } from './router.js';
 import {
   renderDashboard, renderExpenses, renderReports, renderReportDetail,
-  renderStats, renderSettings, renderBTs,
+  renderStats, renderSettings, renderBTs, renderCargos,
   renderReviewerPanel, renderReviewerWorkerDetail, renderReviewerExpenseDetail, renderReviewerReportDetail,
   renderAdminPanel, renderTeamMetrics, renderNotificationsHub, renderMyNotifications
 } from './views.js';
@@ -22,6 +22,7 @@ const SCREENS = {
   stats:     { title: 'Estadisticas', render: renderStats, nav: 'stats' },
   settings:  { title: 'Ajustes', render: renderSettings, nav: 'settings' },
   bts:       { title: 'BT / Proyectos', render: renderBTs, nav: 'settings', back: 'settings' },
+  cargos:    { title: 'Cargos', render: renderCargos, nav: 'settings', back: 'settings' },
   report:    { title: 'Rendicion', render: (id) => renderReportDetail(id), nav: 'reports', back: 'reports' },
   panel:        { title: 'Panel', sub: 'Revision por trabajador', render: renderReviewerPanel, nav: 'panel' },
   panelWorker:  { title: 'Trabajador', render: (id) => renderReviewerWorkerDetail(id), nav: 'panel', back: 'panel' },
