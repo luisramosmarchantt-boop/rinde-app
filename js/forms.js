@@ -661,6 +661,40 @@ export function openBroadcastForm() {
   }});
 }
 
+// ---------- Notificar a un trabajador puntual, con mensaje propio (revisora/admin) ----------
+export function openNotifyWorkerForm(userId) {
+  const worker = store.getProfileById(userId);
+  const html = `
+    <div class="sheet-head"><h2>Notificar a ${esc(worker?.fullName || worker?.rut || '')}</h2><button class="x" data-close>x</button></div>
+    <div class="field"><label>Titulo</label><input class="input" id="ntitle" placeholder="Ej: Falta una boleta" /></div>
+    <div class="field"><label>Mensaje</label><textarea class="textarea" id="nbody" placeholder="Escribe el mensaje..."></textarea></div>
+    <button class="btn primary" data-save style="width:100%;margin-top:14px">Enviar</button>
+  `;
+  openSheet(html, { onMount: (root, close) => {
+    root.querySelector('[data-close]').onclick = () => close();
+    root.querySelector('[data-save]').onclick = async () => {
+      const title = root.querySelector('#ntitle').value.trim();
+      const body = root.querySelector('#nbody').value.trim();
+      if (!title) { toast('Ingresa un titulo', 'err'); return; }
+      const btn = root.querySelector('[data-save]'); btn.disabled = true;
+      try {
+        const { sendPush } = await import('./push.js');
+        const res = await sendPush({ recipientId: userId, title, body, type: 'manual' });
+        if (res.sent > 0) {
+          toast(`Enviado a ${worker?.fullName || 'el trabajador'}`, 'ok');
+          close();
+        } else {
+          btn.disabled = false;
+          toast('No llego: ' + (res.errors?.[0] || 'sin suscripciones activas'), 'err');
+        }
+      } catch (e) {
+        btn.disabled = false;
+        toast('No se pudo enviar: ' + (e.message || e), 'err');
+      }
+    };
+  }});
+}
+
 // ---------- Importar respaldo de Rendiciones App (herramienta de migracion) ----------
 export function openImportBackupForm() {
   let file = null;

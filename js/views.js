@@ -11,7 +11,7 @@ import { navigate } from './router.js';
 import {
   openExpenseForm, openReportForm, openAssignExpenses,
   openProfileForm, openBTForm, openTransferForm, openReviewForm, sendManualReminder,
-  openBroadcastForm, openImportBackupForm, openResolveApprovalForm
+  openBroadcastForm, openImportBackupForm, openResolveApprovalForm, openNotifyWorkerForm
 } from './forms.js';
 import { LOGO_DATAURL } from './assets.js';
 import { newDoc, shareFiles, pdfFile } from './pdf.js';
@@ -1016,7 +1016,7 @@ export function renderReviewerWorkerDetail(workerId) {
     hydrateThumbs(root);
     root.querySelector('[data-act="edit"]').onclick = () => openProfileForm(workerId);
     root.querySelector('[data-act="fund"]').onclick = () => openTransferForm(null, workerId);
-    root.querySelector('[data-act="remind"]').onclick = () => sendManualReminder(workerId, 'manual_reminder');
+    root.querySelector('[data-act="remind"]').onclick = () => openNotifyWorkerForm(workerId);
     root.querySelector('[data-act="reset-pass"]').onclick = async () => {
       const ok = await confirmDialog({
         title: 'Resetear contraseña',
@@ -1107,7 +1107,6 @@ export function renderReviewerReportDetail(id) {
       <button class="btn outline" data-act="download">Descargar rendicion</button>
       <button class="btn outline" data-act="download-receipts">Descargar boletas</button>
       <button class="btn ${isClosed ? 'outline' : 'primary'}" data-act="toggle-close">${isClosed ? 'Reabrir rendicion' : 'Cerrar rendicion'}</button>
-      <button class="btn outline" data-act="notify">Notificar al trabajador</button>
     </div>
     <div class="section-title">Gastos incluidos</div>
     <div class="list">${expenses.length ? expenses.map((e) => expenseItem(e)).join('') : emptyInline('🧾', 'Sin gastos', '')}</div>
@@ -1116,7 +1115,6 @@ export function renderReviewerReportDetail(id) {
     hydrateThumbs(root);
     root.querySelector('[data-act="download"]')?.addEventListener('click', () => downloadRendicion(r));
     root.querySelector('[data-act="download-receipts"]')?.addEventListener('click', () => downloadReceipts(r));
-    root.querySelector('[data-act="notify"]')?.addEventListener('click', () => sendManualReminder(r.ownerId, 'closure_reminder'));
     root.querySelector('[data-act="toggle-close"]')?.addEventListener('click', async () => {
       const next = isClosed ? 'draft' : 'approved';
       try {
