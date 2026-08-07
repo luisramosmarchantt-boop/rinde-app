@@ -15,7 +15,7 @@ import {
 } from './forms.js';
 import { LOGO_DATAURL } from './assets.js';
 import { newDoc, shareFiles, pdfFile } from './pdf.js';
-import { canInstall, promptInstall } from './installPrompt.js';
+import { canInstall, promptInstall, canShowIOSInstallHint, showIOSInstallHelp } from './installPrompt.js';
 
 const cur = () => 'CLP';
 
@@ -83,6 +83,12 @@ export function renderDashboard() {
     <button class="notice-card" data-action="install">
       <span><b>📲 Instalar app</b></span>
       <small>Para que las notificaciones lleguen bien</small>
+    </button>` : ''}
+
+    ${canShowIOSInstallHint() ? `
+    <button class="notice-card" data-action="ios-install">
+      <span><b>📲 Instalar en iPhone</b></span>
+      <small>Compartir → Agregar a inicio</small>
     </button>` : ''}
 
     ${t.unassignedCount > 0 ? `
@@ -155,6 +161,7 @@ export function renderDashboard() {
     hydrateThumbs(root);
     root.querySelector('[data-action="goexpenses"]')?.addEventListener('click', () => navigate('expenses'));
     root.querySelector('[data-action="install"]')?.addEventListener('click', async () => { await promptInstall(); navigate('dashboard'); });
+    root.querySelector('[data-action="ios-install"]')?.addEventListener('click', () => showIOSInstallHelp());
     root.querySelectorAll('[data-action="transfer"]').forEach((b) => b.addEventListener('click', () => openTransferForm()));
     root.querySelector('[data-action="new-expense"]')?.addEventListener('click', () => openExpenseForm());
     root.querySelectorAll('[data-action="edit-transfer"]').forEach((b) => b.addEventListener('click', () => openTransferForm(b.dataset.id)));
@@ -984,6 +991,18 @@ export function renderReviewerHome() {
   const badgeCount = store.getBadgeCount();
 
   const html = `
+    ${canInstall() ? `
+    <button class="notice-card" data-action="install">
+      <span><b>📲 Instalar app</b></span>
+      <small>Para que las notificaciones lleguen bien</small>
+    </button>` : ''}
+
+    ${canShowIOSInstallHint() ? `
+    <button class="notice-card" data-action="ios-install">
+      <span><b>📲 Instalar en iPhone</b></span>
+      <small>Compartir → Agregar a inicio</small>
+    </button>` : ''}
+
     <div class="tilegrid">
       <button class="tile" data-nav="reviewQueue">
         ${pending ? `<span class="count-bubble tile-count">${pending}</span>` : ''}
@@ -1025,6 +1044,8 @@ export function renderReviewerHome() {
     </div>
   `;
   return { html, mount: (root) => {
+    root.querySelector('[data-action="install"]')?.addEventListener('click', async () => { await promptInstall(); navigate('panel'); });
+    root.querySelector('[data-action="ios-install"]')?.addEventListener('click', () => showIOSInstallHelp());
     root.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.nav)));
     root.querySelector('[data-act="projects"]').onclick = () => openProjectsMenu();
     root.querySelector('[data-act="logout"]').onclick = async () => {

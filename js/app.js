@@ -9,7 +9,7 @@ import {
   renderAdminPanel, renderTeamMetrics, renderNotificationsHub, renderMyNotifications
 } from './views.js';
 import { esc } from './utils.js';
-import { canInstall, promptInstall, onInstallAvailable } from './installPrompt.js';
+import { canInstall, promptInstall, onInstallAvailable, canShowIOSInstallHint, showIOSInstallHelp } from './installPrompt.js';
 
 const appEl = document.getElementById('app');
 const APP_NAME = 'Rendiciones Mataquito';
@@ -120,11 +120,13 @@ function renderLogin(initial = {}) {
           ${mode === 'login' ? 'No tengo cuenta, crear una' : 'Ya tengo cuenta, ingresar'}
         </button>
         ${canInstall() ? '<button id="installBtn" class="btn outline" style="width:100%;margin-top:10px">📲 Instalar App Rendiciones</button>' : ''}
+        ${canShowIOSInstallHint() ? '<button id="iosInstallBtn" class="btn outline" style="width:100%;margin-top:10px">📲 Instalar en iPhone</button>' : ''}
         ${mode === 'login' ? '<p class="muted tiny" style="margin-top:16px">¿Olvidaste tu clave? Pidele a la administradora que te la resetee.</p>' : ''}
       </div>
     `;
     appEl.querySelector('#toggleMode').onclick = () => { mode = mode === 'login' ? 'register' : 'login'; error = ''; paint(); };
     appEl.querySelector('#installBtn')?.addEventListener('click', async () => { await promptInstall(); paint(); });
+    appEl.querySelector('#iosInstallBtn')?.addEventListener('click', () => showIOSInstallHelp());
     appEl.querySelector('#authForm').onsubmit = async (e) => {
       e.preventDefault();
       const rut = appEl.querySelector('#authRut').value;
