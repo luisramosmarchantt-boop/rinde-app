@@ -961,8 +961,11 @@ function controllableProfiles() {
     (p.role === 'worker' || p.role === 'admin') && p.id !== store.myUserId());
 }
 
+// Ya no cuenta "pendientes de aprobar": la revisora no tiene que aprobar
+// cada gasto, solo darse una vuelta por las boletas nuevas. El globo baja
+// apenas abre cada gasto (store.markExpenseSeen), sin necesidad de aprobar.
 function teamPendingCount() {
-  return controllableProfiles().reduce((a, w) => a + store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length, 0);
+  return controllableProfiles().reduce((a, w) => a + store.getExpenses(w.id).filter((e) => !e.seen).length, 0);
 }
 
 // BT/Cargos comparten una sola tarjeta de acceso; aca se resuelve a cual de
@@ -1039,13 +1042,13 @@ export function renderReviewerPanel() {
   const workers = controllableProfiles();
   const workerRows = workers.map((w) => {
     const t = store.totals(w.id);
-    const pending = store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length;
+    const unseen = store.getExpenses(w.id).filter((e) => !e.seen).length;
     const cargoPrefix = w.cargoId ? esc(store.cargoLabel(w.cargoId)) + ' - ' : '';
     return `<button class="item" data-open-worker="${w.id}">
       <span class="emoji">👤</span>
       <span class="body">
         <span class="t">${esc(w.fullName || w.rut)}</span>
-        <span class="s">${cargoPrefix}${pending ? pending + ' sin revisar' : 'Al dia'}</span>
+        <span class="s">${cargoPrefix}${unseen ? unseen + ' sin ver' : 'Al dia'}</span>
       </span>
       <span class="amt mono">${formatMoney(t.availableBalance, cur())}</span>
     </button>`;
@@ -1171,6 +1174,7 @@ export function renderReviewerExpenseDetail(id) {
   `;
   return { html, mount: async (root) => {
     root.querySelector('[data-act="review"]').onclick = () => openReviewForm(id);
+    store.markExpenseSeen(id).catch(() => {});
     if (e.receipts?.length) {
       let imgs = '';
       for (const r of e.receipts) {

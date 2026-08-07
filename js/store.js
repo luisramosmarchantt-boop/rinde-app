@@ -62,6 +62,7 @@ function mapExpense(row) {
     reportId: row.report_id, btId: row.bt_id, taxIncluded: row.tax_included, billable: row.billable,
     reviewStatus: row.review_status, approvedAmount: row.approved_amount != null ? Number(row.approved_amount) : null,
     reviewerId: row.reviewer_id, reviewerComment: row.reviewer_comment, reviewedAt: row.reviewed_at,
+    seen: !!row.seen,
     createdAt: new Date(row.created_at).getTime(),
     receipts: [] // se completa aparte (join con expense_receipts) al hidratar
   };
@@ -334,6 +335,18 @@ export async function reviewExpense(expenseId, { status, approvedAmount = null, 
   }).eq('id', expenseId);
   if (error) throw error;
   if (comment) await addComment('expense', expenseId, comment);
+}
+
+// La revisora ya no tiene que aprobar cada gasto para que deje de "contar":
+// con solo abrirlo (ver la boleta) queda descontado del globo de
+// notificaciones. Aprobar/objetar sigue disponible, pero es opcional.
+export async function markExpenseSeen(id) {
+  const e = getExpense(id);
+  if (!e || e.seen) return;
+  const { error } = await supabase.from('expenses').update({ seen: true }).eq('id', id);
+  if (error) throw error;
+  e.seen = true;
+  notify();
 }
 
 export async function addComment(targetType, targetId, body) {
