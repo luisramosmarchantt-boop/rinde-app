@@ -1,6 +1,6 @@
 {
-  "name": "RendiMTQ — Rendición de gastos en equipo",
-  "short_name": "RendiMTQ",
+  "name": "Rendiciones Mataquito — Rendición de gastos en equipo",
+  "short_name": "Rendiciones",
   "description": "Registra gastos, adjunta boletas y sincroniza en vivo con el equipo revisor. Requiere conexión.",
   "start_url": "./index.html",
   "scope": "./",

@@ -40,10 +40,11 @@ export function openExpenseForm(expenseId = null, presetReportId = null) {
        <span class="e">${esc(c.emoji || '')}</span><span>${esc(c.name)}</span>
      </button>`).join('');
   const reports = store.getReports();
-  const reportOpts = `<option value="">- Sin asignar -</option>` + reports.map((r) =>
-    `<option value="${r.id}" ${f.reportId === r.id ? 'selected' : ''}>${esc(r.title)}</option>`).join('');
+  const reportOpts = `<option value="" disabled ${!f.reportId ? 'selected' : ''}>Selecciona una rendicion</option>`
+    + `<option value="__new__">+ Crear nueva rendicion</option>`
+    + reports.map((r) => `<option value="${r.id}" ${f.reportId === r.id ? 'selected' : ''}>${esc(r.title)}</option>`).join('');
   const bts = store.getBTs();
-  const btOpts = `<option value="">- Sin BT -</option>` + bts.map((b) =>
+  const btOpts = `<option value="" disabled ${!f.btId ? 'selected' : ''}>Selecciona un BT</option>` + bts.map((b) =>
     `<option value="${b.id}" ${f.btId === b.id ? 'selected' : ''}>${esc(b.code)}${b.name ? ' - ' + esc(b.name) : ''}</option>`).join('');
 
   const reviewBadge = editing && editing.reviewStatus && editing.reviewStatus !== 'pending'
@@ -80,13 +81,20 @@ export function openExpenseForm(expenseId = null, presetReportId = null) {
     </div>
 
     <div class="field"><label>Categoria</label><div class="cat-grid" id="catGrid">${catGrid}</div></div>
-    <div class="field"><label>BT / Proyecto</label><select class="select" id="bt">${btOpts}</select>${bts.length ? '' : '<div class="help">Aun no hay BT creadas. Pidele a la administradora que agregue una.</div>'}</div>
-    <div class="field"><label>Asignar a rendicion</label><select class="select" id="report">${reportOpts}</select></div>
+    <div class="field">
+      <label>BT / Proyecto <span style="color:var(--danger)">· obligatorio</span></label>
+      <select class="select" id="bt">${btOpts}</select>
+      ${bts.length ? '<div class="help">Cada gasto elige su propio BT, aunque otros gastos de la misma rendicion sean de otro proyecto.</div>' : '<div class="help">Aun no hay BT creadas. Pidele a la administradora que agregue una.</div>'}
+    </div>
+    <div class="field">
+      <label>Asignar a rendicion <span style="color:var(--danger)">· obligatorio</span></label>
+      <select class="select" id="report">${reportOpts}</select>
+    </div>
     <div class="field"><label>Notas</label><textarea class="textarea" id="notes" placeholder="Detalle u observaciones">${esc(f.notes)}</textarea></div>
 
     <div class="btn-row">
       ${editing ? `<button class="btn danger" data-del>Eliminar</button>` : ''}
-      <button class="btn primary" data-save>${editing ? 'Guardar cambios' : 'Guardar gasto'}</button>
+      <button class="btn primary" data-save disabled>${editing ? 'Guardar cambios' : 'Guardar gasto'}</button>
     </div>
   `;
 
@@ -171,10 +179,39 @@ export function openExpenseForm(expenseId = null, presetReportId = null) {
     $('#catGrid').addEventListener('click', (e) => { const btn = e.target.closest('[data-cat]'); if (btn) setCategory(btn.dataset.cat); });
     $('#currency').addEventListener('change', (e) => { f.currency = e.target.value; $('#curSym').textContent = CURRENCIES[f.currency].symbol; });
     $('[data-close]').onclick = () => close();
+
+    // BT y rendicion son obligatorios y van cada uno por su lado (un mismo
+    // dia puede tener boletas de BTs distintos), asi que "Guardar" queda
+    // bloqueado hasta que ambos esten elegidos.
+    const btSelect = $('#bt');
+    const reportSelect = $('#report');
+    const saveBtn = $('[data-save]');
+    function updateSaveState() {
+      saveBtn.disabled = !(btSelect.value && reportSelect.value && reportSelect.value !== '__new__');
+    }
+    btSelect.addEventListener('change', updateSaveState);
+    reportSelect.addEventListener('change', async () => {
+      if (reportSelect.value === '__new__') {
+        const created = await createReportInline();
+        if (created) {
+          const opt = document.createElement('option');
+          opt.value = created.id;
+          opt.textContent = created.title;
+          reportSelect.insertBefore(opt, reportSelect.querySelector('option[value="__new__"]').nextSibling);
+          reportSelect.value = created.id;
+        } else {
+          reportSelect.value = f.reportId || '';
+        }
+      }
+      updateSaveState();
+    });
+    updateSaveState();
     $('[data-save]').onclick = async () => {
       const amount = parseFloat(String($('#amount').value).replace(',', '.'));
       if (!amount || amount <= 0) { toast('Ingresa un monto valido', 'err'); return; }
-      const payload = { amount, currency: $('#currency').value, categoryId: f.categoryId, date: $('#date').value || todayISO(), merchant: $('#merchant').value.trim(), docType: $('#docType').value, docNumber: $('#docNumber').value.trim(), notes: $('#notes').value.trim(), reportId: $('#report').value || null, btId: $('#bt').value || null };
+      if (!btSelect.value) { toast('Selecciona un BT / Proyecto', 'err'); return; }
+      if (!reportSelect.value || reportSelect.value === '__new__') { toast('Selecciona o crea una rendicion', 'err'); return; }
+      const payload = { amount, currency: $('#currency').value, categoryId: f.categoryId, date: $('#date').value || todayISO(), merchant: $('#merchant').value.trim(), docType: $('#docType').value, docNumber: $('#docNumber').value.trim(), notes: $('#notes').value.trim(), reportId: reportSelect.value, btId: btSelect.value };
 
       // Aviso de posible duplicado (mismo N doc, o mismo monto + fecha), entre CUALQUIER trabajador.
       const btn = $('[data-save]'); btn.disabled = true;
@@ -293,6 +330,33 @@ export function openReportForm(reportId = null) {
       } catch (e) { toast('No se pudo guardar: ' + (e.message || e), 'err'); }
     };
   }});
+}
+
+// Version minima de "Nueva rendicion", para crearla sin salir del formulario
+// de un gasto (solo pide el titulo). Devuelve {id, title} o null si se cancela.
+function createReportInline() {
+  return new Promise((resolve) => {
+    const html = `
+      <div class="sheet-head"><h2>Nueva rendicion</h2><button class="x" data-close>x</button></div>
+      <div class="field"><label>Titulo de la rendicion</label><input class="input" id="newReportTitle" placeholder="Ej: Rendicion Agosto" /></div>
+      <button class="btn primary" data-create>Crear rendicion</button>
+    `;
+    const close = openSheet(html, {
+      onMount(root) {
+        root.querySelector('[data-close]').onclick = () => close(null);
+        root.querySelector('[data-create]').onclick = async () => {
+          const title = root.querySelector('#newReportTitle').value.trim();
+          if (!title) { toast('Ponle un titulo a la rendicion', 'err'); return; }
+          try {
+            const id = await store.addReport(store.myUserId(), { title });
+            toast('Rendicion creada', 'ok');
+            close({ id, title });
+          } catch (e) { toast('No se pudo crear: ' + (e.message || e), 'err'); }
+        };
+      },
+      onClose: (r) => resolve(r || null)
+    });
+  });
 }
 
 // ---------- Asignar gastos a una rendicion (seleccion multiple) ----------

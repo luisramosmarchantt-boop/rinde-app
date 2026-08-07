@@ -2,7 +2,7 @@
 // Cache de la "app shell" (los datos en si viven en Supabase, no aca).
 // Ademas maneja notificaciones Web Push.
 
-const CACHE = 'rindeapp-cloud-v6';
+const CACHE = 'rindeapp-cloud-v7';
 const RUNTIME = 'rindeapp-cloud-runtime-v1';
 // Unicos hosts externos que sirven archivos inmutables (versionados en la
 // URL). Cualquier otro origen externo (Supabase: datos, auth, storage) es
@@ -95,8 +95,8 @@ self.addEventListener('fetch', (event) => {
 // ===== Web Push =====
 self.addEventListener('push', (event) => {
   let payload = {};
-  try { payload = event.data ? event.data.json() : {}; } catch (e) { payload = { title: 'RendiMTQ', body: event.data ? event.data.text() : '' }; }
-  const title = payload.title || 'RendiMTQ';
+  try { payload = event.data ? event.data.json() : {}; } catch (e) { payload = { title: 'Rendiciones Mataquito', body: event.data ? event.data.text() : '' }; }
+  const title = payload.title || 'Rendiciones Mataquito';
   const options = {
     body: payload.body || '',
     icon: './icons/icon-192.png',

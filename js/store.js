@@ -555,6 +555,12 @@ export function byCategory(expenses) {
   return Array.from(map.entries()).map(([id, total]) => ({ category: getCategory(id), total })).sort((a, b) => b.total - a.total);
 }
 
+export function byBT(expenses) {
+  const map = new Map();
+  expenses.forEach((e) => { map.set(e.btId || null, (map.get(e.btId || null) || 0) + finalAmount(e)); });
+  return Array.from(map.entries()).map(([id, total]) => ({ bt: id ? getBT(id) : null, total })).sort((a, b) => b.total - a.total);
+}
+
 export function lastMonths(n = 6, ownerId = currentUserId) {
   const result = [];
   const d = new Date(); d.setDate(1);

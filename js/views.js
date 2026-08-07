@@ -62,6 +62,9 @@ export function renderDashboard() {
   const activeReports = store.getReports().slice(0, 3);
   const balanceCls = t.availableBalance < 0 ? 'danger' : 'ok';
   const canManageTransfers = store.isReviewerOrAdmin();
+  const isAdmin = store.myRole() === 'admin';
+  const adminPending = isAdmin ? teamPendingCount() : 0;
+  const badgeCount = store.getBadgeCount();
 
   const html = `
     <div class="balance-card ${balanceCls}">
@@ -76,16 +79,6 @@ export function renderDashboard() {
       </div>
     </div>
 
-    <button class="notice-card" data-action="inbox" style="align-items:center">
-      <span><b>🔔 Mis notificaciones</b></span>
-      ${store.getBadgeCount() ? `<span class="count-bubble">${store.getBadgeCount()}</span>` : `<small>Al dia</small>`}
-    </button>
-
-    <div class="quick-actions">
-      <button class="qa primary" data-action="expense"><b>+ Gasto</b><span>Foto, OCR y datos</span></button>
-      <button class="qa" data-action="report"><b>+ Rendicion</b><span>Agrupar gastos</span></button>
-    </div>
-
     ${canInstall() ? `
     <button class="notice-card" data-action="install">
       <span><b>📲 Instalar app</b></span>
@@ -98,6 +91,39 @@ export function renderDashboard() {
       <small>Revisar y asignar</small>
     </button>` : ''}
 
+    <button class="btn primary" data-action="new-expense" style="width:100%;margin-bottom:16px">📸 Nuevo gasto</button>
+
+    <div class="tilegrid" style="margin-bottom:20px">
+      <button class="tile" data-nav="expenses">
+        <div class="ico tint-primary">🧾</div>
+        <b>Mis gastos</b>
+        <span class="desc">Historial completo</span>
+      </button>
+      <button class="tile" data-nav="reports">
+        <div class="ico tint-info">📋</div>
+        <b>Mis rendiciones</b>
+        <span class="desc">Todas agrupadas por BT</span>
+      </button>
+      <button class="tile" data-nav="inbox">
+        ${badgeCount ? `<span class="count-bubble tile-count">${badgeCount}</span>` : ''}
+        <div class="ico tint-success">🔔</div>
+        <b>Mis notificaciones</b>
+        <span class="desc">Avisos para ti</span>
+      </button>
+      <button class="tile" data-nav="settings">
+        <div class="ico tint-neutral">⚙️</div>
+        <b>Ajustes</b>
+        <span class="desc">Cuenta y app</span>
+      </button>
+      ${isAdmin ? `
+      <button class="tile priv" data-nav="admin">
+        ${adminPending ? `<span class="count-bubble tile-count">${adminPending}</span>` : ''}
+        <div class="ico tint-primary">🛠️</div>
+        <b>Panel de administración</b>
+        <span class="desc">Revisión y administración</span>
+      </button>` : ''}
+    </div>
+
     ${activeReports.length ? `
       <div class="section-title">Rendiciones abiertas</div>
       <div class="list">${activeReports.map(reportItem).join('')}</div>
@@ -108,7 +134,7 @@ export function renderDashboard() {
       <a href="#/expenses" class="tiny">Ver todos</a>
     </div>
     <div class="list">
-      ${recent.length ? recent.map((e) => expenseItem(e)).join('') : emptyInline('🧾', 'Sin gastos todavia', 'Toca + Gasto para agregar la primera boleta')}
+      ${recent.length ? recent.map((e) => expenseItem(e)).join('') : emptyInline('🧾', 'Sin gastos todavia', 'Toca Nuevo gasto para agregar la primera boleta')}
     </div>
 
     ${transfers.length ? `
@@ -128,12 +154,11 @@ export function renderDashboard() {
   return { html, mount: (root) => {
     hydrateThumbs(root);
     root.querySelector('[data-action="goexpenses"]')?.addEventListener('click', () => navigate('expenses'));
-    root.querySelector('[data-action="inbox"]')?.addEventListener('click', () => navigate('inbox'));
     root.querySelector('[data-action="install"]')?.addEventListener('click', async () => { await promptInstall(); navigate('dashboard'); });
     root.querySelectorAll('[data-action="transfer"]').forEach((b) => b.addEventListener('click', () => openTransferForm()));
-    root.querySelector('[data-action="expense"]')?.addEventListener('click', () => openExpenseForm());
-    root.querySelector('[data-action="report"]')?.addEventListener('click', () => openReportForm());
+    root.querySelector('[data-action="new-expense"]')?.addEventListener('click', () => openExpenseForm());
     root.querySelectorAll('[data-action="edit-transfer"]').forEach((b) => b.addEventListener('click', () => openTransferForm(b.dataset.id)));
+    root.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.nav)));
     wireExpenseItems(root);
     wireReportItems(root);
   }};
@@ -662,6 +687,8 @@ export function renderTeamMetrics() {
   if (teamMetricsRange === 'month') expenses = expenses.filter((e) => monthKey(e.date) === monthKey(undefined));
   const total = expenses.reduce((a, e) => a + store.finalAmount(e), 0);
   const catData = store.byCategory(expenses);
+  const btData = store.byBT(expenses);
+  const maxBT = Math.max(...btData.map((b) => b.total), 1);
 
   const months = [];
   const base = new Date(); base.setDate(1);
@@ -673,12 +700,7 @@ export function renderTeamMetrics() {
   }
 
   const workers = controllableProfiles();
-  const ranking = workers.map((w) => {
-    const wExpenses = expenses.filter((e) => e.ownerId === w.id);
-    const pending = store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length;
-    return { worker: w, total: wExpenses.reduce((a, e) => a + store.finalAmount(e), 0), count: wExpenses.length, pending };
-  }).sort((a, b) => b.total - a.total);
-  const totalPending = ranking.reduce((a, r) => a + r.pending, 0);
+  const totalPending = teamPendingCount();
 
   const html = `
     <div class="chips" style="margin-bottom:10px">
@@ -687,35 +709,34 @@ export function renderTeamMetrics() {
     </div>
 
     <div class="kpis" style="margin-bottom:6px">
-      <div class="kpi"><div class="v mono">${formatMoney(total, cur())}</div><div class="k">Total equipo ${teamMetricsRange === 'month' ? 'del mes' : 'historico'}</div></div>
+      <div class="kpi"><div class="v mono">${formatMoney(total, cur())}</div><div class="k">Total gastado ${teamMetricsRange === 'month' ? 'este mes' : 'historico'}</div></div>
+      <div class="kpi warn"><div class="v">${totalPending}</div><div class="k">Pendientes de revisar</div></div>
       <div class="kpi"><div class="v">${expenses.length}</div><div class="k">Gastos registrados</div></div>
       <div class="kpi"><div class="v">${workers.length}</div><div class="k">Colaboradores</div></div>
-      <div class="kpi"><div class="v">${totalPending}</div><div class="k">Pendientes de revisar</div></div>
     </div>
 
     <div class="section-title">Evolucion del equipo (ultimos 6 meses)</div>
     <div class="card">${monthBars(months, cur())}</div>
 
+    <div class="section-title">Por BT / Proyecto</div>
+    <div class="card">
+      ${btData.length ? `<div class="bars">` + btData.map((b) => `
+        <div class="bar-row">
+          <div class="bar-top">
+            <span>${esc(b.bt ? store.btLabel(b.bt.id) : 'Sin proyecto asignado')}</span>
+            <span class="mono">${formatMoney(b.total, cur())}</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(b.total / maxBT * 100).toFixed(0)}%"></div></div>
+        </div>`).join('') + `</div>` : '<p class="muted center" style="padding:14px 0">Sin datos en este periodo</p>'}
+    </div>
+
     <div class="section-title">Por categoria</div>
     <div class="card">
       ${catData.length ? donutChart(catData, cur()) : '<p class="muted center" style="padding:14px 0">Sin datos en este periodo</p>'}
     </div>
-
-    <div class="section-title">Ranking por colaborador</div>
-    <div class="list">
-      ${ranking.length ? ranking.map((r) => `<button class="item" data-open-worker="${r.worker.id}">
-        <span class="emoji">👤</span>
-        <span class="body">
-          <span class="t">${esc(r.worker.fullName || r.worker.rut)}</span>
-          <span class="s">${r.count} gasto(s)${r.pending ? ' - ' + r.pending + ' sin revisar' : ''}</span>
-        </span>
-        <span class="amt mono">${formatMoney(r.total, cur())}</span>
-      </button>`).join('') : emptyInline('', 'Sin colaboradores aun', '')}
-    </div>
   `;
   return { html, mount: (root) => {
     root.querySelectorAll('[data-range]').forEach((b) => b.addEventListener('click', () => { teamMetricsRange = b.dataset.range; navigate('metrics'); }));
-    root.querySelectorAll('[data-open-worker]').forEach((b) => b.onclick = () => navigate('panelWorker/' + b.dataset.openWorker));
   }};
 }
 
@@ -819,22 +840,6 @@ export function renderSettings() {
       <button class="btn sm outline" data-act="profile">Editar</button>
     </div>
 
-    <div class="section-title">Notificaciones</div>
-    <div class="settings-list">
-      <button class="si" data-act="inbox">
-        <span class="ic">🔔</span><span class="lbl">Mis notificaciones</span>
-        ${store.getBadgeCount() ? `<span class="count-bubble">${store.getBadgeCount()}</span>` : ''}
-        <span class="chev"></span>
-      </button>
-    </div>
-
-    ${role === 'reviewer' || role === 'admin' ? `
-    <div class="section-title">Revision</div>
-    <div class="settings-list">
-      <button class="si" data-act="panel"><span class="ic">🔎</span><span class="lbl">Panel de revision</span><span class="chev"></span></button>
-      ${role === 'admin' ? `<button class="si" data-act="admin"><span class="ic">🛠️</span><span class="lbl">Administracion</span><span class="chev"></span></button>` : ''}
-    </div>` : ''}
-
     <div class="section-title">Preferencias</div>
     <div class="settings-list">
       <button class="si" data-act="bts">
@@ -869,11 +874,8 @@ export function renderSettings() {
   `;
   return { html, mount: async (root) => {
     root.querySelector('[data-act="profile"]').onclick = () => openProfileForm();
-    root.querySelector('[data-act="inbox"]').onclick = () => navigate('inbox');
     root.querySelector('[data-act="bts"]').onclick = () => navigate('bts');
     root.querySelector('[data-act="cargos"]').onclick = () => navigate('cargos');
-    root.querySelector('[data-act="panel"]')?.addEventListener('click', () => navigate('panel'));
-    root.querySelector('[data-act="admin"]')?.addEventListener('click', () => navigate('admin'));
     root.querySelector('[data-act="import-backup"]').onclick = () => openImportBackupForm();
     root.querySelector('[data-act="logout"]').onclick = async () => {
       const ok = await confirmDialog({ title: 'Cerrar sesion', message: 'Volveras a la pantalla de ingreso.', confirmText: 'Cerrar sesion' });
@@ -957,6 +959,76 @@ export function renderCargos() {
 function controllableProfiles() {
   return store.getAllProfiles().filter((p) =>
     (p.role === 'worker' || p.role === 'admin') && p.id !== store.myUserId());
+}
+
+function teamPendingCount() {
+  return controllableProfiles().reduce((a, w) => a + store.getExpenses(w.id).filter((e) => e.reviewStatus === 'pending').length, 0);
+}
+
+// BT/Cargos comparten una sola tarjeta de acceso; aca se resuelve a cual de
+// las dos pantallas entrar.
+async function openProjectsMenu() {
+  const idx = await actionSheet('Proyectos y cargos', [{ label: 'BT / Proyectos' }, { label: 'Cargos' }]);
+  if (idx === 0) navigate('bts');
+  else if (idx === 1) navigate('cargos');
+}
+
+// ============ INICIO DE LA REVISORA (pantalla de accesos) ============
+// La revisora "pura" no rinde sus propios gastos, asi que su Inicio es esta
+// grilla de accesos en vez del dashboard de saldo/gastos del colaborador.
+export function renderReviewerHome() {
+  const pending = teamPendingCount();
+  const badgeCount = store.getBadgeCount();
+
+  const html = `
+    <div class="tilegrid">
+      <button class="tile" data-nav="reviewQueue">
+        ${pending ? `<span class="count-bubble tile-count">${pending}</span>` : ''}
+        <div class="ico tint-primary">🗂️</div>
+        <b>Administrar rendiciones</b>
+        <span class="desc">Revisar y aprobar</span>
+      </button>
+      <button class="tile" data-nav="metrics">
+        <div class="ico tint-info">📊</div>
+        <b>Métricas</b>
+        <span class="desc">Gasto del equipo</span>
+      </button>
+      <button class="tile" data-nav="inbox">
+        ${badgeCount ? `<span class="count-bubble tile-count">${badgeCount}</span>` : ''}
+        <div class="ico tint-success">🔔</div>
+        <b>Mis notificaciones</b>
+        <span class="desc">Avisos para ti</span>
+      </button>
+      <button class="tile" data-nav="notifications">
+        <div class="ico tint-warning">📣</div>
+        <b>Enviar notificaciones</b>
+        <span class="desc">Mensaje a colaboradores</span>
+      </button>
+      <button class="tile" data-act="projects">
+        <div class="ico tint-neutral">🏗️</div>
+        <b>Proyectos y cargos</b>
+        <span class="desc">BT y cargos</span>
+      </button>
+      <button class="tile" data-nav="settings">
+        <div class="ico tint-neutral">⚙️</div>
+        <b>Ajustes</b>
+        <span class="desc">Tu perfil y la app</span>
+      </button>
+      <button class="tile danger" data-act="logout">
+        <div class="ico tint-danger">🚪</div>
+        <b>Cerrar sesión</b>
+        <span class="desc">Salir de la cuenta</span>
+      </button>
+    </div>
+  `;
+  return { html, mount: (root) => {
+    root.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.nav)));
+    root.querySelector('[data-act="projects"]').onclick = () => openProjectsMenu();
+    root.querySelector('[data-act="logout"]').onclick = async () => {
+      const ok = await confirmDialog({ title: 'Cerrar sesion', message: 'Volveras a la pantalla de ingreso.', confirmText: 'Cerrar sesion' });
+      if (ok) { const { logout } = await import('./app.js'); await logout(); }
+    };
+  }};
 }
 
 // ============ PANEL DE REVISION (revisora / admin) ============
@@ -1158,44 +1230,97 @@ export function renderReviewerReportDetail(id) {
 }
 
 // ============ ADMINISTRACION (solo admin) ============
+let adminAcctFilter = 'all';
+function realRoleLabel(role) { return role === 'admin' ? 'Admin' : role === 'reviewer' ? 'Revisora' : 'Colaborador'; }
+
 export function renderAdminPanel() {
-  const profiles = store.getAllProfiles();
+  const pending = teamPendingCount();
+  const allProfiles = store.getAllProfiles();
+  const profiles = allProfiles.filter((p) =>
+    adminAcctFilter === 'all' ? true : adminAcctFilter === 'reviewer' ? p.role === 'reviewer' : p.role === 'worker');
+
   const rows = profiles.map((p) => `
-    <div class="manage-row">
-      <span class="nm">${esc(p.fullName || p.rut)}<br><span class="muted tiny">${esc(p.rut)} - ${roleLabelText(p.role)}${p.cargoId ? ' - ' + esc(store.cargoLabel(p.cargoId)) : ''}</span></span>
-      ${p.id !== store.myUserId() ? `<button data-edit="${p.id}">Editar</button>` : ''}
-      ${p.id !== store.myUserId() ? `
-        <select data-role="${p.id}" class="select" style="width:auto">
-          <option value="worker" ${p.role === 'worker' ? 'selected' : ''}>Colaborador</option>
-          <option value="reviewer" ${p.role === 'reviewer' ? 'selected' : ''}>Revisora</option>
-          <option value="admin" ${p.role === 'admin' ? 'selected' : ''}>Admin</option>
-        </select>` : '<span class="muted tiny">(tu)</span>'}
+    <div class="acct-row">
+      <div style="flex:1;min-width:0">
+        <div class="nm">${esc(p.fullName || p.rut)}</div>
+        <div class="muted tiny">${esc(p.rut)}${p.cargoId ? ' - ' + esc(store.cargoLabel(p.cargoId)) : ''}</div>
+      </div>
+      <span class="badge role-${p.role}">${realRoleLabel(p.role)}</span>
+      ${p.id !== store.myUserId() ? `<button class="btn sm outline" data-more="${p.id}">⋯</button>` : '<span class="muted tiny">(tu)</span>'}
     </div>`).join('');
 
   const html = `
-    <div class="section-title">Control del equipo</div>
-    <button class="btn outline" data-act="metrics" style="width:100%;margin-bottom:8px">📊 Metricas del equipo</button>
-    <button class="btn outline" data-act="notifications" style="width:100%;margin-bottom:14px">🔔 Notificaciones</button>
-    <div class="section-title">BT / Proyectos</div>
-    <button class="btn outline" data-act="bts" style="width:100%;margin-bottom:14px">Gestionar BT / Proyectos</button>
-    <div class="section-title">Cargos</div>
-    <button class="btn outline" data-act="cargos" style="width:100%;margin-bottom:14px">Gestionar Cargos</button>
-    <div class="section-title">Cuentas (${profiles.length})</div>
-    ${rows}
+    <div class="section-title" style="margin-top:0">Accesos</div>
+    <div class="tilegrid" style="margin-bottom:6px">
+      <button class="tile" data-nav="reviewQueue">
+        ${pending ? `<span class="count-bubble tile-count">${pending}</span>` : ''}
+        <div class="ico tint-primary">🗂️</div>
+        <b>Administrar rendiciones</b>
+      </button>
+      <button class="tile" data-nav="metrics">
+        <div class="ico tint-info">📊</div>
+        <b>Métricas</b>
+      </button>
+      <button class="tile" data-nav="notifications">
+        <div class="ico tint-warning">📣</div>
+        <b>Notificaciones</b>
+      </button>
+      <button class="tile" data-act="projects">
+        <div class="ico tint-neutral">🏗️</div>
+        <b>Proyectos y cargos</b>
+      </button>
+    </div>
+
+    <div class="section-title">Cuentas y roles (${allProfiles.length})</div>
+    <div class="chips" style="margin-bottom:10px">
+      <button class="chip ${adminAcctFilter === 'all' ? 'active' : ''}" data-filter="all">Todas</button>
+      <button class="chip ${adminAcctFilter === 'reviewer' ? 'active' : ''}" data-filter="reviewer">Revisoras</button>
+      <button class="chip ${adminAcctFilter === 'worker' ? 'active' : ''}" data-filter="worker">Colaboradores</button>
+    </div>
+    ${profiles.length ? rows : emptyInline('', 'Sin cuentas en este filtro', '')}
   `;
   return { html, mount: (root) => {
-    root.querySelector('[data-act="bts"]').onclick = () => navigate('bts');
-    root.querySelector('[data-act="cargos"]').onclick = () => navigate('cargos');
-    root.querySelector('[data-act="metrics"]').onclick = () => navigate('metrics');
-    root.querySelector('[data-act="notifications"]').onclick = () => navigate('notifications');
-    root.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openProfileForm(b.dataset.edit));
-    root.querySelectorAll('[data-role]').forEach((sel) => sel.onchange = async () => {
-      const ok = await confirmDialog({ title: 'Cambiar rol', message: `Se cambiara el rol de esta cuenta a "${roleLabelText(sel.value)}".`, confirmText: 'Cambiar' });
-      if (!ok) { navigate('admin'); return; }
-      try { await store.setRole(sel.dataset.role, sel.value); toast('Rol actualizado', 'ok'); }
-      catch (e) { toast('No se pudo cambiar: ' + (e.message || e), 'err'); navigate('admin'); }
-    });
+    root.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.nav)));
+    root.querySelector('[data-act="projects"]').onclick = () => openProjectsMenu();
+    root.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => { adminAcctFilter = b.dataset.filter; navigate('admin'); }));
+    root.querySelectorAll('[data-more]').forEach((b) => b.onclick = () => openAccountMenu(b.dataset.more));
   }};
+}
+
+async function openAccountMenu(profileId) {
+  const p = store.getProfileById(profileId);
+  if (!p) return;
+  const idx = await actionSheet(p.fullName || p.rut, [
+    { label: 'Editar cuenta' },
+    { label: 'Cambiar rol' },
+    { label: 'Resetear contraseña' }
+  ]);
+  if (idx === 0) openProfileForm(profileId);
+  else if (idx === 1) await changeAccountRole(p);
+  else if (idx === 2) await resetAccountPassword(p);
+}
+
+async function changeAccountRole(p) {
+  const options = [{ value: 'worker', label: 'Colaborador' }, { value: 'reviewer', label: 'Revisora' }, { value: 'admin', label: 'Admin' }]
+    .filter((o) => o.value !== p.role);
+  const idx = await actionSheet('Cambiar rol de ' + (p.fullName || p.rut), options.map((o) => ({ label: o.label })));
+  if (idx == null) return;
+  const target = options[idx];
+  const ok = await confirmDialog({ title: 'Cambiar rol', message: `Se cambiara el rol de esta cuenta a "${target.label}".`, confirmText: 'Cambiar' });
+  if (!ok) return;
+  try { await store.setRole(p.id, target.value); toast('Rol actualizado', 'ok'); }
+  catch (e) { toast('No se pudo cambiar: ' + (e.message || e), 'err'); }
+}
+
+async function resetAccountPassword(p) {
+  const ok = await confirmDialog({
+    title: 'Resetear contraseña',
+    message: `La contraseña de ${p.fullName || p.rut} quedara en "123456". Se le pedira cambiarla apenas entre.`,
+    confirmText: 'Resetear'
+  });
+  if (!ok) return;
+  try { await store.resetWorkerPassword(p.id); toast('Contraseña reseteada a 123456', 'ok'); }
+  catch (e) { toast('No se pudo resetear: ' + (e.message || e), 'err'); }
 }
 
 // ===== wiring comun =====

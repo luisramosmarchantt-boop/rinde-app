@@ -5,103 +5,82 @@ import { startRouter, onRoute, navigate } from './router.js';
 import {
   renderDashboard, renderExpenses, renderReports, renderReportDetail,
   renderStats, renderSettings, renderBTs, renderCargos,
-  renderReviewerPanel, renderReviewerWorkerDetail, renderReviewerExpenseDetail, renderReviewerReportDetail,
+  renderReviewerHome, renderReviewerPanel, renderReviewerWorkerDetail, renderReviewerExpenseDetail, renderReviewerReportDetail,
   renderAdminPanel, renderTeamMetrics, renderNotificationsHub, renderMyNotifications
 } from './views.js';
-import { openExpenseForm } from './forms.js';
 import { esc } from './utils.js';
 import { canInstall, promptInstall, onInstallAvailable } from './installPrompt.js';
 
 const appEl = document.getElementById('app');
+const APP_NAME = 'Rendiciones Mataquito';
 
-// Config de cada pantalla
+// Config de cada pantalla: el titulo se muestra como subtitulo bajo la marca.
 const SCREENS = {
-  dashboard: { title: 'RendiMTQ', sub: 'Caja chica y rendiciones', render: renderDashboard, nav: 'dashboard' },
-  expenses:  { title: 'Gastos', render: renderExpenses, nav: 'expenses' },
-  reports:   { title: 'Rendiciones', render: renderReports, nav: 'reports' },
-  stats:     { title: 'Estadisticas', render: renderStats, nav: 'stats' },
-  settings:  { title: 'Ajustes', render: renderSettings, nav: 'settings' },
-  bts:       { title: 'BT / Proyectos', render: renderBTs, nav: 'settings', back: 'settings' },
-  cargos:    { title: 'Cargos', render: renderCargos, nav: 'settings', back: 'settings' },
-  report:    { title: 'Rendicion', render: (id) => renderReportDetail(id), nav: 'reports', back: 'reports' },
-  panel:        { title: 'Panel', sub: 'Revision por colaborador', render: renderReviewerPanel, nav: 'panel' },
-  panelWorker:  { title: 'Colaborador', render: (id) => renderReviewerWorkerDetail(id), nav: 'panel', back: 'panel' },
-  panelExpense: { title: 'Gasto', render: (id) => renderReviewerExpenseDetail(id), nav: 'panel', back: 'panel' },
-  panelReport:  { title: 'Rendicion', render: (id) => renderReviewerReportDetail(id), nav: 'panel', back: 'panel' },
-  admin:        { title: 'Administracion', render: renderAdminPanel, nav: 'panel', back: 'panel' },
-  metrics:       { title: 'Metricas', sub: 'Todo el equipo', render: renderTeamMetrics, nav: 'metrics' },
-  notifications: { title: 'Notificaciones', sub: 'Avisar a los colaboradores', render: renderNotificationsHub, nav: 'notifications' },
-  inbox:         { title: 'Mis notificaciones', render: renderMyNotifications, nav: 'dashboard', back: 'dashboard' }
+  dashboard: { title: 'Inicio', render: renderDashboard },
+  expenses:  { title: 'Mis gastos', render: renderExpenses },
+  reports:   { title: 'Mis rendiciones', render: renderReports },
+  report:    { title: 'Rendicion', render: (id) => renderReportDetail(id) },
+  stats:     { title: 'Estadisticas', render: renderStats },
+  settings:  { title: 'Ajustes', render: renderSettings },
+  bts:       { title: 'BT / Proyectos', render: renderBTs },
+  cargos:    { title: 'Cargos', render: renderCargos },
+  panel:          { title: 'Panel de revisora', render: renderReviewerHome },
+  reviewQueue:    { title: 'Administrar rendiciones', render: renderReviewerPanel },
+  panelWorker:    { title: 'Colaborador', render: (id) => renderReviewerWorkerDetail(id) },
+  panelExpense:   { title: 'Gasto', render: (id) => renderReviewerExpenseDetail(id) },
+  panelReport:    { title: 'Rendicion', render: (id) => renderReviewerReportDetail(id) },
+  admin:          { title: 'Administracion', render: renderAdminPanel },
+  metrics:        { title: 'Metricas del equipo', render: renderTeamMetrics },
+  notifications:  { title: 'Notificaciones', render: renderNotificationsHub },
+  inbox:          { title: 'Mis notificaciones', render: renderMyNotifications }
 };
 
-function navFor(role) {
-  // La revisora "pura" (no admin) usa una barra de control: sin Gastos/
-  // Rendiciones propias (ella no rinde), con Metricas y Notificaciones en
-  // su lugar. El admin mantiene la barra original (rinde sus propios
-  // gastos) y llega a Metricas/Notificaciones desde el Panel de Administracion.
-  if (role === 'reviewer') {
-    return [
-      { id: 'dashboard', label: 'Inicio', ic: '🏠', route: 'dashboard' },
-      { id: 'metrics', label: 'Metricas', ic: '📊', route: 'metrics' },
-      { id: 'fab', fab: true },
-      { id: 'panel', label: 'Panel', ic: '🔎', route: 'panel' },
-      { id: 'notifications', label: 'Notif.', ic: '🔔', route: 'notifications' },
-      { id: 'settings', label: 'Ajustes', ic: '⚙️', route: 'settings' }
-    ];
-  }
-  const base = [
-    { id: 'dashboard', label: 'Inicio', ic: '🏠', route: 'dashboard' },
-    { id: 'expenses', label: 'Gastos', ic: '🧾', route: 'expenses' },
-    { id: 'fab', fab: true },
-    { id: 'reports', label: 'Rendiciones', ic: '📋', route: 'reports' },
-    { id: 'settings', label: 'Ajustes', ic: '⚙️', route: 'settings' }
-  ];
-  if (role === 'admin') {
-    base.splice(3, 0, { id: 'panel', label: 'Panel', ic: '🔎', route: 'panel' });
-  }
-  return base;
+// La revisora "pura" (no admin) parte en el Panel (ella no rinde). El resto
+// (colaborador y admin, que si rinden sus propios gastos) parte en Inicio.
+function homeFor(role) { return role === 'reviewer' ? 'panel' : 'dashboard'; }
+
+// Pantallas de revision/administracion: para la revisora cuelgan directo de
+// su Panel (que ya es su Inicio); para el admin cuelgan de su pantalla de
+// Administracion (que a su vez cuelga de su Inicio de colaborador).
+const NESTED_UNDER_ADMIN = ['reviewQueue', 'metrics', 'notifications', 'bts', 'cargos'];
+function parentRoute(name, role) {
+  if (name === 'dashboard' || name === 'panel') return null;
+  if (name === 'admin') return 'dashboard';
+  if (NESTED_UNDER_ADMIN.includes(name)) return role === 'reviewer' ? 'panel' : 'admin';
+  if (name === 'panelWorker' || name === 'panelExpense' || name === 'panelReport') return 'reviewQueue';
+  if (name === 'report') return 'reports';
+  if (name === 'expenses' || name === 'reports') return 'dashboard';
+  return homeFor(role);
 }
 
 function renderShell(route) {
   const screen = SCREENS[route.name] || SCREENS.dashboard;
   const result = screen.render.length ? screen.render(route.param) : screen.render();
   const { html, mount } = result;
-  const nav = navFor(store.myRole());
-
-  const backBtn = screen.back
-    ? `<button class="iconbtn" data-back>&larr;</button>`
-    : '';
+  const role = store.myRole();
+  const home = homeFor(role);
+  const parent = parentRoute(route.name, role);
+  const isHome = route.name === home;
 
   appEl.innerHTML = `
-    <header class="appbar">
-      ${backBtn}
-      <h1>${esc(screen.title)}${screen.sub ? `<span class="sub">${esc(screen.sub)}</span>` : ''}</h1>
-      ${route.name === 'dashboard' ? `<button class="iconbtn" data-quick-expense>+</button>` : ''}
+    <header class="appbar2">
+      <button class="navbtn back${parent ? '' : ' dim'}" data-back ${parent ? '' : 'disabled'}>&larr;</button>
+      <div class="brand">
+        <img src="icons/icon-192.png" alt="${APP_NAME}" />
+        <h1>${APP_NAME}${screen.title ? `<span class="sub">${esc(screen.title)}</span>` : ''}</h1>
+      </div>
+      <button class="navbtn home${isHome ? ' active' : ''}" data-home>⌂</button>
     </header>
     <main class="screen">${html}</main>
-    ${renderNav(screen.nav, nav)}
-    <button class="fab" data-fab>+</button>
   `;
 
-  appEl.querySelector('[data-back]')?.addEventListener('click', () => navigate(screen.back));
-  appEl.querySelector('[data-quick-expense]')?.addEventListener('click', () => openExpenseForm());
-  appEl.querySelector('[data-fab]')?.addEventListener('click', () => openExpenseForm(null, route.name === 'report' ? route.param : null));
-  appEl.querySelectorAll('[data-nav]').forEach((a) =>
-    a.addEventListener('click', (e) => { e.preventDefault(); navigate(a.dataset.nav); }));
+  if (parent) appEl.querySelector('[data-back]').addEventListener('click', () => navigate(parent));
+  appEl.querySelector('[data-home]').addEventListener('click', () => navigate(home));
 
   const main = appEl.querySelector('.screen');
   if (mount) mount(main);
 
   window.scrollTo(0, 0);
-}
-
-function renderNav(active, nav) {
-  return `<nav class="bottomnav" style="grid-template-columns:repeat(${nav.length},1fr)">` + nav.map((n) => {
-    if (n.fab) return `<a class="fab-slot"></a>`;
-    return `<a href="#/${n.route}" data-nav="${n.route}" class="${active === n.id ? 'active' : ''}">
-      <span class="ic">${n.ic}</span><span>${n.label}</span>
-    </a>`;
-  }).join('') + `</nav>`;
 }
 
 // ===== Login / registro (pantalla previa al shell) =====
@@ -115,8 +94,8 @@ function renderLogin(initial = {}) {
   function paint() {
     appEl.innerHTML = `
       <div class="auth-screen" style="padding:32px 20px;max-width:420px;margin:0 auto">
-        <img src="icons/icon-192.png" alt="RendiMTQ" style="width:76px;height:76px;display:block;margin:0 auto 14px" />
-        <h1 style="margin-bottom:4px;text-align:center">RendiMTQ</h1>
+        <img src="icons/icon-192.png" alt="${APP_NAME}" style="width:76px;height:76px;display:block;margin:0 auto 14px" />
+        <h1 style="margin-bottom:4px;text-align:center;font-size:24px">${APP_NAME}</h1>
         <p class="muted" style="margin-bottom:20px;text-align:center">${mode === 'login' ? 'Ingresa con tu RUT' : 'Crea tu cuenta con tu RUT'}</p>
         ${error ? `<div class="card" style="border:1px solid #d33;color:#d33;margin-bottom:14px">${esc(error)}</div>` : ''}
         <form id="authForm">
@@ -207,6 +186,12 @@ export async function boot() {
     await maybeShowPushPrompt();
     unsubStore = store.subscribe(() => { if (currentRoute) renderShell(currentRoute); });
     stopRoute = onRoute((route) => { currentRoute = route; renderShell(route); });
+    // La revisora "pura" parte en el Panel, no en el Inicio de colaborador;
+    // si no hay un hash previo (o quedo uno de una sesion de otro rol en
+    // este mismo navegador), se cae al Inicio correcto para este rol.
+    if (!location.hash || !(SCREENS[location.hash.replace(/^#\/?/, '').split('/')[0]])) {
+      location.hash = '#/' + homeFor(store.myRole());
+    }
     startRouter();
   } else if (currentRoute) {
     renderShell(currentRoute);
