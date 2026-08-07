@@ -532,6 +532,28 @@ export async function resetWorkerPassword(userId) {
   notify();
 }
 
+// Elimina una cuenta de colaborador por completo: sus rendiciones, gastos,
+// boletas, transferencias y la cuenta misma (ya no puede volver a entrar).
+// No se puede deshacer. La funcion SQL delete_worker_account solo deja
+// borrar cuentas con role='worker' (asi una revisora jamas puede borrar una
+// cuenta de revisora/admin, aunque a ella le aparezca disfrazada de
+// colaboradora en su panel).
+export async function deleteWorkerAccount(userId) {
+  const receiptPaths = data.expenses
+    .filter((e) => e.ownerId === userId)
+    .flatMap((e) => (e.receipts || []).map((r) => r.path));
+  for (const path of receiptPaths) await deleteReceiptFile(path);
+
+  const { error } = await supabase.rpc('delete_worker_account', { target_user_id: userId });
+  if (error) throw error;
+
+  data.expenses = data.expenses.filter((e) => e.ownerId !== userId);
+  data.reports = data.reports.filter((r) => r.ownerId !== userId);
+  data.transfers = data.transfers.filter((t) => t.ownerId !== userId);
+  data.profiles = data.profiles.filter((p) => p.id !== userId);
+  notify();
+}
+
 // La propia cuenta define su nueva contraseña (tras un reset, o cuando
 // quiera) y se le levanta la marca de cambio obligatorio.
 export async function completePasswordChange(newPassword) {

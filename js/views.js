@@ -1128,6 +1128,7 @@ export function renderReviewerWorkerDetail(workerId) {
       <button class="btn outline" data-act="reset-pass">🔑 Resetear contraseña</button>
     </div>
     ${w.mustChangePassword ? `<p class="muted tiny" style="margin:-8px 2px 14px">⚠️ Contraseña reseteada, aun no la cambia</p>` : ''}
+    ${w.role === 'worker' ? `<button class="btn danger no-print" data-act="delete" style="width:100%;margin-bottom:14px">🗑️ Eliminar cuenta</button>` : ''}
 
     <div class="section-title" style="margin-top:18px">Rendiciones (${reports.length})</div>
     <div class="list">${reports.length ? reportRows : emptyInline('', 'Sin rendiciones', 'Aun no crea ninguna')}</div>
@@ -1152,6 +1153,7 @@ export function renderReviewerWorkerDetail(workerId) {
       try { await store.resetWorkerPassword(workerId); toast('Contraseña reseteada a 123456', 'ok'); navigate('panelWorker/' + workerId); }
       catch (e) { toast('No se pudo resetear: ' + (e.message || e), 'err'); }
     };
+    root.querySelector('[data-act="delete"]')?.addEventListener('click', () => deleteWorkerAccountFlow(w, 'reviewQueue'));
     root.querySelectorAll('[data-open-report]').forEach((b) => b.onclick = () => navigate('panelReport/' + b.dataset.openReport));
     root.querySelectorAll('[data-action="expense"]').forEach((el) =>
       el.addEventListener('click', () => navigate('panelExpense/' + el.dataset.id)));
@@ -1315,14 +1317,20 @@ export function renderAdminPanel() {
 async function openAccountMenu(profileId) {
   const p = store.getProfileById(profileId);
   if (!p) return;
-  const idx = await actionSheet(p.fullName || p.rut, [
+  // "Eliminar cuenta" solo se ofrece para colaboradores: borra rendiciones,
+  // gastos y boletas junto con la cuenta, asi que revisoras y admins quedan
+  // fuera de esta via (deben cambiarse de rol antes, si hiciera falta).
+  const options = [
     { label: 'Editar cuenta' },
     { label: 'Cambiar rol' },
-    { label: 'Resetear contraseña' }
-  ]);
+    { label: 'Resetear contraseña' },
+    ...(p.role === 'worker' ? [{ label: 'Eliminar cuenta', danger: true }] : [])
+  ];
+  const idx = await actionSheet(p.fullName || p.rut, options);
   if (idx === 0) openProfileForm(profileId);
   else if (idx === 1) await changeAccountRole(p);
   else if (idx === 2) await resetAccountPassword(p);
+  else if (idx === 3) await deleteWorkerAccountFlow(p, 'admin');
 }
 
 async function changeAccountRole(p) {
@@ -1346,6 +1354,23 @@ async function resetAccountPassword(p) {
   if (!ok) return;
   try { await store.resetWorkerPassword(p.id); toast('Contraseña reseteada a 123456', 'ok'); }
   catch (e) { toast('No se pudo resetear: ' + (e.message || e), 'err'); }
+}
+
+// Borra la cuenta y TODO su historial (rendiciones, gastos, boletas). No se
+// puede deshacer, por eso la confirmacion es explicita sobre eso.
+async function deleteWorkerAccountFlow(p, redirectRoute) {
+  const ok = await confirmDialog({
+    title: 'Eliminar cuenta',
+    message: `Se eliminara la cuenta de ${p.fullName || p.rut} junto con todas sus rendiciones, gastos y boletas. Esto no se puede deshacer.`,
+    confirmText: 'Eliminar todo',
+    danger: true
+  });
+  if (!ok) return;
+  try {
+    await store.deleteWorkerAccount(p.id);
+    toast('Cuenta eliminada', 'ok');
+    navigate(redirectRoute);
+  } catch (e) { toast('No se pudo eliminar: ' + (e.message || e), 'err'); }
 }
 
 // ===== wiring comun =====
